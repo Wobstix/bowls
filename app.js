@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.2 (Stage 2)';
+  const VERSION = '0.2.1 (Stage 2)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
