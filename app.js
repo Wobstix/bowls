@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4.2 (Stage 4)';
+  const VERSION = '0.4.3 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -589,9 +589,9 @@
         print() {
           let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
           pa.innerHTML = `<div class="printres"><h1>${esc(c.settings.name)} — results</h1><p>${esc(state.club.name)} · ${fmtDate(c.created)}${n < total ? ' · results so far' : ''}</p>
-            <h2>Prizes</h2><table>${st.prizes.map(p => `<tr><td><b>${esc(p.prize)}</b></td><td>Team ${p.team}</td><td>${esc(name(p.team))}</td><td>${prizeText(p, wp)}</td></tr>`).join('')}</table>
-            <h2>Placings</h2><table><tr><th>#</th><th>Team</th><th>Players</th>${wp ? '<th>Pts</th>' : ''}<th>For</th><th>Agst</th><th>Diff</th></tr>
-            ${rows.map(r => `<tr><td>${r.place}</td><td><b>${r.team}</b></td><td>${esc(r.name)}</td>${wp ? `<td>${r.points}</td>` : ''}<td>${r.for}</td><td>${r.against}</td><td>${signed(r.score)}</td></tr>`).join('')}</table></div>`;
+            <h2>Prizes</h2><table>${st.prizes.map(p => `<tr><td><b>${esc(p.prize)}</b></td><td class="c">Team ${p.team}</td><td>${esc(name(p.team))}</td><td>${prizeText(p, wp)}</td></tr>`).join('')}</table>
+            <h2>Placings</h2><table><tr><th class="c">#</th><th class="c">Team</th><th>Players</th>${wp ? '<th class="c">Pts</th>' : ''}<th class="c">For</th><th class="c">Agst</th><th class="c">Diff</th></tr>
+            ${rows.map(r => `<tr><td class="c">${r.place}</td><td class="c"><b>${r.team}</b></td><td>${esc(r.name)}</td>${wp ? `<td class="c">${r.points}</td>` : ''}<td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c">${signed(r.score)}</td></tr>`).join('')}</table></div>`;
           setTimeout(() => window.print(), 50);
         },
       },
