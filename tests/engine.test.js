@@ -211,6 +211,37 @@ suite('Full competitions', 'Draw, Round 1 scores, Round 2 pairing, results: ever
   }
 });
 
+// 6b. Card-by-card entry
+suite('Card entry', 'Results worked out from each team\'s card match the rink-by-rink results; disagreeing cards are flagged (game 1 always, game 2 when the pair is certain); matching cards never are.', check => {
+  for (let k = 0; k < 2000; k++) {
+    const f = Object.keys(E.FORMATS)[k % 3], pool = k % 2 ? CLUB3 : CLUB2;
+    const n = R(3, pool.length), rinks = E.shuffle(pool, rng).slice(0, n);
+    const teams = Array.from({ length: 2 * n }, (_, i) => ({ id: E.teamLetter(i) }));
+    const wp = 2, r1 = E.drawRound1(teams, rinks, rng), tab = E.round2Table(rinks, rng);
+    const res1 = {}; r1.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res1[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], wp); });
+    const r2 = E.round2Matches(r1, res1, tab.table);
+    const res2 = {}; r2.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res2[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], wp); });
+    const scores = {};
+    [res1, res2].forEach((res, gi) => Object.values(res).forEach(m => m.lines.forEach(l => { (scores[l.team] = scores[l.team] || [])[gi] = { f: l.for, a: l.against }; })));
+    const A = E.standings(teams, [res1, res2], { booby: true }), B = E.standingsFromCards(teams, scores, 2, wp, { booby: true });
+    check(JSON.stringify(A.rows.map(r => [r.team, r.points, r.score, r.against, r.place])) === JSON.stringify(B.rows.map(r => [r.team, r.points, r.score, r.against, r.place])), 'same ranking');
+    check(JSON.stringify(A.prizes.map(p => [p.prize, p.team])) === JSON.stringify(B.prizes.map(p => [p.prize, p.team])), 'same prizes');
+    check(E.cardsEntered(teams, scores, 2) === 2 * n, 'all cards counted');
+    check(E.checkCards(r1, tab.table, scores).length === 0, 'matching cards raise no warning');
+    // corrupt one game-1 card
+    const m = r1[R(0, r1.length - 1)], x = m.teams[0], bad = JSON.parse(JSON.stringify(scores));
+    bad[x][0].f += 1;
+    check(E.checkCards(r1, tab.table, bad).some(w => w.game === 1 && w.rink === m.rink), 'game 1 mismatch flagged');
+    // corrupt one game-2 card where the pair is certain
+    const certain = r2.filter(mm => mm.teams.every(t => { const rr = r1.find(q => q.teams.includes(t)); return !res1[rr.rink].drawn; }));
+    if (certain.length) { const mm = certain[0], bad2 = JSON.parse(JSON.stringify(scores)); bad2[mm.teams[0]][1].a += 1;
+      check(E.checkCards(r1, tab.table, bad2).some(w => w.game === 2 && w.rink === mm.rink), 'game 2 mismatch flagged'); }
+    // partly entered: counts and no crash
+    const part = {}; teams.slice(0, n).forEach(t => part[t.id] = scores[t.id]);
+    check(E.cardsEntered(teams, part, 2) === n && E.standingsFromCards(teams, part, 2, wp, {}).rows.length === 2 * n, 'partial entry');
+  }
+});
+
 // 7. Remembered settings
 suite('Remembered settings', 'New competition opens on the last format with its last settings; each format keeps its own; first use starts from plain values.', check => {
   let mem = {};

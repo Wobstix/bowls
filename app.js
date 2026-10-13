@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.3 (Stage 3)';
+  const VERSION = '0.4 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -84,7 +84,7 @@
     const list = comps.length ? comps.map(c => `
       <div class="row tap" data-act="go" data-to="#comp/${c.id}">
         <div class="main"><b>${esc(c.settings.name)}</b><div class="sub">${c.settings.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[c.settings.format]} · ${c.settings.rounds} × ${c.settings.ends} ends · ${fmtDate(c.created)}</div></div>
-        <span class="chip ${c.status === 'drawn' ? '' : 'grey'}">${c.status === 'drawn' ? 'Drawn' : 'Entries'}</span><span class="chev">›</span></div>`).join('')
+        <span class="chip ${c.status === 'entries' ? 'grey' : ''}">${statusLabel(c)}</span><span class="chev">›</span></div>`).join('')
       : `<div class="empty">No competitions yet.</div>`;
     return {
       title: state.club.name || 'Bowls Competition Manager', sub: state.club.greens.map(g => `Green ${g.name} · ${g.rinks}`).join('   '),
@@ -93,7 +93,7 @@
         <div class="card"><div class="lbl">Competitions</div>${list}</div>
         <div class="card"><div class="lbl">Club</div>
           <div class="row tap" data-act="go" data-to="#members"><div class="main">Members<div class="sub">${active} active</div></div><span class="chev">›</span></div>
-          <div class="row tap" data-act="go" data-to="#setup"><div class="main">Greens &amp; rinks</div><span class="chev">›</span></div>
+          <div class="row tap" data-act="go" data-to="#setup"><div class="main">Greens &amp; rinks<div class="sub">Change greens or number of rinks</div></div><span class="chev">›</span></div>
           <div class="row tap" data-act="go" data-to="#backup"><div class="main">Backup / restore</div><span class="chev">›</span></div>
         </div>
         <div class="version">Version ${VERSION}</div>`,
@@ -242,18 +242,25 @@
     return E.checkEntries({ format: c.settings.format, mode: c.settings.mode, playerCount: entrants(c).length, teamCount: c.fixedTeams.length,
       rinksInUse: c.rinks.length, rounds: c.settings.rounds });
   }
-  function clearDraw(c) { c.draw = null; c.status = 'entries'; }
+  function clearDraw(c) { c.draw = null; c.scores = {}; c.status = 'entries'; }
+  function hasScores(c) { return Object.values(c.scores || {}).some(g => (g || []).some(e => e && (Number.isInteger(e.f) || Number.isInteger(e.a)))); }
   function guardDrawn(c, fn) {
     if (!c.draw) { fn(); return; }
-    confirmBox('The draw has been made. Changing this clears the draw so it can be made again.', 'Change', () => { clearDraw(c); fn(); save(); render(); });
+    confirmBox(`The draw has been made${hasScores(c) ? ' and scores entered' : ''}. Changing this clears the draw${hasScores(c) ? ' and all scores' : ''} so it can be made again.`, 'Change', () => { clearDraw(c); fn(); save(); render(); });
+  }
+  function winPts(c) { return c.settings.bonusOn ? c.settings.bonus : 0; }
+  function statusLabel(c) {
+    if (!c.draw) return 'Entries';
+    const n = E.cardsEntered(c.draw.teams, c.scores || {}, c.settings.rounds);
+    return n === c.draw.teams.length ? 'Finished' : hasScores(c) ? 'Scoring' : 'Drawn';
   }
 
   function compScreen(c, tab) {
     const s = c.settings;
-    const tabs = [['entries', 'Entries'], ['rinks', 'Rinks'], ['draw', 'Draw'], ['cards', 'Cards']];
+    const tabs = [['entries', 'Entries'], ['rinks', 'Rinks'], ['draw', 'Draw'], ['cards', 'Cards'], ['scores', 'Scores'], ['results', 'Results']];
     const head = `<div class="tabs">${tabs.map(([k, l]) => `<button data-act="go" data-to="#comp/${c.id}/${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     const sub = `${s.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[s.format]} · ${s.rounds} × ${s.ends} ends${s.bonusOn ? ` · ${s.bonus} pts a win` : ''}`;
-    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : tab === 'cards' ? cardsTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : fixedEntries(c));
+    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : tab === 'cards' ? cardsTab(c) : tab === 'scores' ? scoresTab(c) : tab === 'results' ? resultsTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : fixedEntries(c));
     r.title = s.name; r.sub = sub; r.back = '#home'; r.body = head + r.body;
     return r;
   }
@@ -392,7 +399,7 @@
     const round1 = E.drawRound1(teams, rinks);
     const t2 = s.rounds === 2 ? E.round2Table(rinks) : null;
     c.draw = { made: Date.now(), teams, round1, table: t2 ? t2.table : null, crossGreen: t2 ? t2.crossGreenMoves : 0, outOfPosition: oop };
-    c.status = 'drawn'; save();
+    c.scores = {}; c.status = 'drawn'; save();
   }
 
   function drawTab(c) {
@@ -414,10 +421,10 @@
           ${d.teams.map(t => `<div class="row tap" data-act="editteam" data-id="${t.id}"><span class="chip">${t.id}</span><div class="main">${esc(t.name)}</div><span class="small muted">${startOf(d, t.id)}</span><span class="chev">›</span></div>`).join('')}
           <p class="small muted">Tap a team to change a name (e.g. a late replacement).</p>
         </div>
-        <div class="msg ok">Score entry and results come in the next stage.</div>`,
+        `,
       bottom: `<div class="btns"><button class="btn alt" data-act="redraw">New draw</button><button class="btn" data-act="go" data-to="#comp/${c.id}/cards">Skip cards</button></div>`,
       actions: {
-        redraw() { confirmBox('Make a new draw? The current one will be replaced.', 'New draw', () => { makeDraw(c); render(); toast('New draw made'); }); },
+        redraw() { confirmBox(`Make a new draw? The current one${hasScores(c) ? ' and all scores entered' : ''} will be replaced.`, 'New draw', () => { makeDraw(c); render(); toast('New draw made'); }); },
         editteam(el) {
           const t = d.teams.find(x => x.id === el.dataset.id);
           const dd = dialog(`<h3 style="margin:0 0 12px">Team ${t.id}</h3><div class="field"><label>Names (skip first)</label><input type="text" id="tn" value="${esc(t.name)}"></div>
@@ -467,6 +474,110 @@
       },
     };
   }
+  // ---------- Scores: typed card by card ----------
+  const teamOrder = (a, b) => a.id.length - b.id.length || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  function warnText(c, w, me) {
+    const other = w.teams.find(t => t !== me), g = w.game - 1, sc = c.scores || {};
+    const fmt = id => { const e = (sc[id] || [])[g]; return `${e.f}–${e.a}`; };
+    return `Game ${w.game} doesn’t match Team ${other}’s card (${me}: ${fmt(me)}, ${other}: ${fmt(other)})`;
+  }
+  function scoresTab(c) {
+    if (!c.draw) return { body: `<div class="empty">Make the draw first.</div>`, bottom: `<button class="btn" data-act="go" data-to="#comp/${c.id}/rinks">Go to rinks</button>` };
+    c.scores = c.scores || {};
+    const teams = c.draw.teams.slice().sort(teamOrder), games = c.settings.rounds;
+    const val = (t, g, k) => { const e = (c.scores[t] || [])[g]; return e && Number.isInteger(e[k]) ? e[k] : ''; };
+    const inp = (t, g, k) => `<input class="sc" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="next" autocomplete="off" data-t="${t}" data-g="${g}" data-k="${k}" value="${val(t, g, k)}" aria-label="Team ${t} game ${g + 1} ${k === 'f' ? 'for' : 'against'}">`;
+    function refresh() {
+      const n = E.cardsEntered(c.draw.teams, c.scores, games), warns = E.checkCards(c.draw.round1, c.draw.table, c.scores);
+      document.querySelectorAll('.srow').forEach(r => {
+        const t = r.dataset.t, ok = E.cardsEntered([{ id: t }], c.scores, games) === 1;
+        r.classList.toggle('done', ok);
+        const mine = warns.filter(w => w.teams.includes(t));
+        r.querySelector('.swarn').innerHTML = mine.map(w => `<div>⚠ ${esc(warnText(c, w, t))}</div>`).join('');
+      });
+      const cnt = $('#scount'); if (cnt) cnt.innerHTML = `<b>${n}</b> of <b>${teams.length}</b> cards entered${warns.length ? ` · <b>${warns.length}</b> to check` : ''}`;
+    }
+    return {
+      keepScroll: true,
+      body: `
+        <p class="small muted" style="margin-top:0">Take the cards in letter order and type the scores off each card. ${games === 2 ? 'Four numbers per card.' : 'Two numbers per card.'}</p>
+        ${teams.map(t => `<div class="card srow" data-t="${t.id}">
+          <div class="shead"><span class="tl">${t.id}</span><span class="nm">${esc(t.name)}</span><span class="tick">✓</span></div>
+          ${Array.from({ length: games }, (_, g) => `<div class="sgame"><span class="gl">Game ${g + 1}</span><label>For ${inp(t.id, g, 'f')}</label><label>Against ${inp(t.id, g, 'a')}</label></div>`).join('')}
+          <div class="swarn"></div></div>`).join('')}`,
+      bottom: `<div class="count" id="scount"></div><button class="btn" data-act="go" data-to="#comp/${c.id}/results" style="margin-top:0">Results</button>`,
+      after() {
+        const all = [...document.querySelectorAll('input.sc')];
+        all.forEach((el, i) => {
+          el.addEventListener('input', () => {
+            el.value = el.value.replace(/\D/g, '').slice(0, 2);
+            const t = el.dataset.t, g = +el.dataset.g, k = el.dataset.k;
+            const arr = c.scores[t] = c.scores[t] || [];
+            arr[g] = arr[g] || {}; arr[g][k] = el.value === '' ? null : parseInt(el.value, 10);
+            c.status = statusLabel(c).toLowerCase(); save(); refresh();
+          });
+          el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const nx = all[i + 1]; if (nx) nx.focus(); else el.blur(); } });
+          el.addEventListener('focus', () => el.select());
+        });
+        refresh();
+      },
+    };
+  }
+
+  // ---------- Results ----------
+  function resultsData(c) {
+    const s = c.settings, teams = c.draw.teams, wp = winPts(c);
+    const st = E.standingsFromCards(teams, c.scores || {}, s.rounds, wp, { booby: s.booby });
+    const n = E.cardsEntered(teams, c.scores || {}, s.rounds), warns = E.checkCards(c.draw.round1, c.draw.table, c.scores || {});
+    const name = id => (teams.find(t => t.id === id) || {}).name || '';
+    return { st, n, warns, wp, name, total: teams.length };
+  }
+  const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v);
+  function prizeText(p, wp) {
+    const r = p.row || p.line;
+    return `${wp ? `${r.points} pts, ` : ''}${signed(r.score)}${p.line ? ' in game 2' : ''}`;
+  }
+  function resultsTab(c) {
+    if (!c.draw) return { body: `<div class="empty">Make the draw first.</div>` };
+    const { st, n, warns, wp, name, total } = resultsData(c);
+    if (!n && !hasScores(c)) return { body: `<div class="empty">No scores yet. Enter the cards on the Scores tab.</div>`, bottom: `<button class="btn" data-act="go" data-to="#comp/${c.id}/scores">Enter scores</button>` };
+    const rows = st.rows.filter(r => r.played);
+    return {
+      keepScroll: true,
+      body: `
+        ${n < total ? `<div class="msg warn">Results so far — ${total - n} card${total - n > 1 ? 's' : ''} still to enter.</div>` : '<div class="msg ok">All cards entered.</div>'}
+        ${warns.length ? `<div class="msg error">${warns.length} pair${warns.length > 1 ? 's' : ''} of cards don’t agree. Check them on the Scores tab.</div>` : ''}
+        <div class="card"><div class="lbl">Prizes</div>
+          ${st.prizes.map(p => `<div class="row"><div class="main"><b>${esc(p.prize)}</b><div class="sub">Team ${p.team} · ${esc(name(p.team))}</div></div><b>${prizeText(p, wp)}</b></div>`).join('') || '<div class="muted">—</div>'}
+        </div>
+        <div class="card" style="overflow-x:auto"><div class="lbl">Placings</div>
+          <table><tr><th>#</th><th>Team</th>${wp ? '<th class="c">Pts</th>' : ''}<th class="c">For</th><th class="c">Agst</th><th class="c">Diff</th></tr>
+          ${rows.map(r => `<tr><td>${r.place}</td><td><b>${r.team}</b><div class="small muted">${esc(r.name)}</div></td>${wp ? `<td class="c"><b>${r.points}</b></td>` : ''}<td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c"><b>${signed(r.score)}</b></td></tr>`).join('')}</table>
+          <p class="small muted">Ranked on ${wp ? 'points, then ' : ''}difference, then fewest shots against.</p>
+        </div>`,
+      bottom: `<div class="btns"><button class="btn alt" data-act="print">Print</button><button class="btn" data-act="share">Share</button></div>`,
+      actions: {
+        async share() {
+          const lines = [`${c.settings.name} — results${n < total ? ' (so far)' : ''}`, ''];
+          st.prizes.forEach(p => lines.push(`${p.prize}: Team ${p.team} (${name(p.team)}) ${prizeText(p, wp)}`));
+          lines.push('', 'Placings:');
+          rows.forEach(r => lines.push(`${r.place}. Team ${r.team} – ${wp ? `${r.points} pts, ` : ''}${signed(r.score)} (${r.for}–${r.against}) – ${r.name}`));
+          const text = lines.join('\n');
+          try { if (navigator.share) { await navigator.share({ title: c.settings.name + ' results', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+          try { await navigator.clipboard.writeText(text); toast('Results copied — paste into WhatsApp'); } catch (e) { toast('Could not share'); }
+        },
+        print() {
+          let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
+          pa.innerHTML = `<div class="printres"><h1>${esc(c.settings.name)} — results</h1><p>${esc(state.club.name)} · ${fmtDate(c.created)}${n < total ? ' · results so far' : ''}</p>
+            <h2>Prizes</h2><table>${st.prizes.map(p => `<tr><td><b>${esc(p.prize)}</b></td><td>Team ${p.team}</td><td>${esc(name(p.team))}</td><td>${prizeText(p, wp)}</td></tr>`).join('')}</table>
+            <h2>Placings</h2><table><tr><th>#</th><th>Team</th><th>Players</th>${wp ? '<th>Pts</th>' : ''}<th>For</th><th>Agst</th><th>Diff</th></tr>
+            ${rows.map(r => `<tr><td>${r.place}</td><td><b>${r.team}</b></td><td>${esc(r.name)}</td>${wp ? `<td>${r.points}</td>` : ''}<td>${r.for}</td><td>${r.against}</td><td>${signed(r.score)}</td></tr>`).join('')}</table></div>`;
+          setTimeout(() => window.print(), 50);
+        },
+      },
+    };
+  }
+
   function startOf(d, id) { const m = d.round1.find(x => x.teams.includes(id)); return m ? m.rink : ''; }
 
   // ---------- Backup ----------

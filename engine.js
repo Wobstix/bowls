@@ -258,6 +258,47 @@
     return { rows, prizes };
   }
 
+  // ---------- Card-by-card entry ----------
+  // scores[teamId] = [ {f, a}, {f, a} ]  (game 1, game 2) typed straight off each team's card.
+  const okNum = v => Number.isInteger(v) && v >= 0;
+  const gameDone = e => !!e && okNum(e.f) && okNum(e.a);
+  function cardLine(team, e, winPoints) {
+    const wp = winPoints || 0, won = e.f > e.a, drawn = e.f === e.a, pts = drawn ? wp / 2 : won ? wp : 0;
+    return { team, for: e.f, against: e.a, score: e.f - e.a, points: pts, total: e.f - e.a + pts, won, drawn };
+  }
+  function standingsFromCards(teams, scores, rounds, winPoints, opts) {
+    const rs = [];
+    for (let g = 0; g < rounds; g++) {
+      const obj = {};
+      teams.forEach(t => { const e = (scores[t.id] || [])[g]; if (gameDone(e)) obj[t.id] = { lines: [cardLine(t.id, e, winPoints)] }; });
+      rs.push(obj);
+    }
+    return standings(teams, rs, opts);
+  }
+  function cardsEntered(teams, scores, rounds) {
+    return teams.filter(t => { for (let g = 0; g < rounds; g++) if (!gameDone((scores[t.id] || [])[g])) return false; return true; }).length;
+  }
+  // Warnings when the two cards of a match disagree. Game 1 opponents come from the draw.
+  // Game 2 opponents are only certain when neither game-1 rink feeding that rink was level.
+  function checkCards(round1, table, scores) {
+    const warn = [], g = (id, k) => (scores[id] || [])[k];
+    const mirror = (x, y, k) => { const ex = g(x, k), ey = g(y, k); return !(gameDone(ex) && gameDone(ey)) || (ex.f === ey.a && ex.a === ey.f); };
+    const fed = {}; let g1ok = {};
+    round1.forEach(m => {
+      const [x, y] = m.teams;
+      if (!mirror(x, y, 0)) warn.push({ game: 1, rink: m.rink, teams: [x, y] });
+      const ex = g(x, 0), ey = g(y, 0);
+      g1ok[m.rink] = gameDone(ex) && gameDone(ey) && mirror(x, y, 0) && ex.f !== ex.a;
+      if (table && g1ok[m.rink]) {
+        const w = ex.f > ex.a ? x : y, l = w === x ? y : x;
+        (fed[table[m.rink].winnersTo] = fed[table[m.rink].winnersTo] || []).push(w);
+        (fed[table[m.rink].losersTo] = fed[table[m.rink].losersTo] || []).push(l);
+      }
+    });
+    Object.keys(fed).forEach(r => { const t = fed[r]; if (t.length === 2 && !mirror(t[0], t[1], 1)) warn.push({ game: 2, rink: r, teams: t }); });
+    return warn;
+  }
+
   // ---------- Skip cards ----------
   function skipCards(comp, teams, round1, table) {
     const cards = [];
@@ -287,6 +328,6 @@
 
   const api = { FORMATS, GROUPS, POS_X, posCost, makeRng, shuffle, teamLetter, sortRinks, greenOf,
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
-    scoreMatch, round2Matches, standings, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings };
+    scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);
