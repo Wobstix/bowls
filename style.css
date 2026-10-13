@@ -88,14 +88,14 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   #printArea svg:last-child{page-break-after:auto;break-after:auto}
 }
 
-.sheet-t{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:2.5px solid #000;font-size:20px}
-.sheet-t th{position:sticky;z-index:3;background:#fff;color:#000;font-size:15px;font-weight:700;text-transform:none;text-align:center;padding:5px 2px;border-bottom:1.5px solid #000;border-right:1.5px solid #000}
+.sheet-t{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;background:#fff;border:2.5px solid #000;font-size:20px}
+.sheet-t th{position:sticky;z-index:3;background:#fff;color:#000;font-size:14px;overflow:hidden;font-weight:700;text-transform:none;text-align:center;padding:5px 2px;border-bottom:1.5px solid #000;border-right:1.5px solid #000}
 .sheet-t tr.h1 th.gh{border-bottom:1px dotted #555}
 .sheet-t tr.h2 th{border-bottom:2.5px solid #000;font-weight:600}
 .sheet-t th:last-child,.sheet-t td:last-child{border-right:0}
 .sheet-t td{padding:0;border-bottom:1px dotted #555;border-right:1px dotted #555;text-align:center;vertical-align:middle}
-.sheet-t td.tm{font-size:24px;font-weight:700;width:16%;border-right:2px solid #000;padding:4px 2px}
-.sheet-t td.dn{width:13%;font-size:24px;font-weight:800;color:var(--green);border-left:2px solid #000}
+.sheet-t td.tm{font-size:24px;font-weight:700;border-right:2px solid #000;padding:4px 2px}
+.sheet-t td.dn{font-size:24px;font-weight:800;color:var(--green);border-left:2px solid #000}
 .sheet-t th.dn{border-left:2px solid #000}
 .sheet-t td.g0+td.g1{border-left:2px solid #000}
 .sheet-t th.gh+th.gh{border-left:2px solid #000}
@@ -109,3 +109,9 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .printres table{width:100%;border-collapse:collapse;font-size:13pt}
 .printres td,.printres th{border:1px solid #888;padding:1.5mm 2mm;text-align:left}
 @media print{ #printArea .printres{display:block} }
+.sheet-t tr.namesrow td{background:var(--green);color:#fff;font-size:17px;font-weight:700;text-align:left;padding:7px 10px;border-right:0}
+.sheet-t tr.srow.cur td.tm{background:var(--green);color:#fff}
+.sheet-t td.tm{cursor:pointer}
+.sheet-t col.c-tm,.sheet-t col.c-dn{width:15%}
+.sheet-t col.c-sc{width:17.5%}
+.sheet-t.one col.c-sc{width:35%}

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4.1 (Stage 4)';
+  const VERSION = '0.4.2 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -501,10 +501,11 @@
     return {
       keepScroll: true,
       body: `
-        <table class="sheet-t">
+        <table class="sheet-t ${games === 1 ? 'one' : ''}">
+          <colgroup><col class="c-tm">${'<col class="c-sc">'.repeat(2 * games)}<col class="c-dn"></colgroup>
           <thead><tr class="h1"><th rowspan="2" class="tm">Team</th>${Array.from({ length: games }, (_, g) => `<th colspan="2" class="gh">${gname[g]}</th>`).join('')}<th rowspan="2" class="dn">Done</th></tr>
           <tr class="h2">${Array.from({ length: games }, () => '<th>For</th><th>Against</th>').join('')}</tr></thead>
-          <tbody>${teams.map(t => `<tr class="srow" data-t="${t.id}"><td class="tm">${t.id}</td>${Array.from({ length: games }, (_, g) => inp(t.id, g, 'f') + inp(t.id, g, 'a')).join('')}<td class="dn"></td></tr>`).join('')}</tbody>
+          <tbody>${teams.map(t => `<tr class="srow" data-t="${t.id}"><td class="tm" data-act="names" data-t="${t.id}">${t.id}</td>${Array.from({ length: games }, (_, g) => inp(t.id, g, 'f') + inp(t.id, g, 'a')).join('')}<td class="dn"></td></tr>`).join('')}</tbody>
         </table>
         <div id="swarns" style="margin-top:12px"></div>`,
       bottom: `<div class="count" id="scount"></div><button class="btn" data-act="go" data-to="#comp/${c.id}/results" style="margin-top:0">Results</button>`,
@@ -514,6 +515,19 @@
         document.querySelectorAll('.sheet-t tr.h1 th').forEach(th => th.style.top = top + 'px');
         document.querySelectorAll('.sheet-t tr.h2 th').forEach(th => th.style.top = (top + h1.offsetHeight) + 'px');
         const all = [...document.querySelectorAll('input.sc')];
+        // names of the team you are working on, shown in a line under its row
+        const cols = 2 + 2 * games;
+        const showNames = t => {
+          const cur = document.querySelector('tr.namesrow');
+          if (cur && cur.dataset.t === t) return;
+          if (cur) cur.remove();
+          document.querySelectorAll('tr.srow.cur').forEach(r => r.classList.remove('cur'));
+          const row = document.querySelector(`tr.srow[data-t="${t}"]`); if (!row) return;
+          const team = teams.find(x => x.id === t);
+          row.classList.add('cur');
+          row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}">Team ${t}: ${esc(team.name)}</td></tr>`);
+        };
+        screen.actions = Object.assign(screen.actions || {}, { names(el) { showNames(el.dataset.t); } });
         all.forEach((el, i) => {
           el.addEventListener('input', () => {
             el.value = el.value.replace(/\D/g, '').slice(0, 2);
@@ -523,7 +537,7 @@
             c.status = statusLabel(c).toLowerCase(); save(); refresh();
           });
           el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const nx = all[i + 1]; if (nx) nx.focus(); else el.blur(); } });
-          el.addEventListener('focus', () => el.select());
+          el.addEventListener('focus', () => { el.select(); showNames(el.dataset.t); });
         });
         refresh();
       },
