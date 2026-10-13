@@ -150,20 +150,27 @@ suite('Round 2 same green', 'When the rinks in use on each green allow it, every
 });
 
 // 5. Scoring
-suite('Scoring', 'Score = for minus against; bonus only to the winner (none when switched off); level scores go to the team that scored the last end.', check => {
+suite('Scoring', 'Score = for minus against. A win earns the win points; a level game is a draw: points shared, difference 0, and the team that scored the last end goes to the winners\' rink.', check => {
   for (let k = 0; k < 20000; k++) {
-    const a = R(0, 30), b = rng() < 0.15 ? a : R(0, 30), bonus = rng() < 0.5 ? 0 : R(1, 4);
+    const a = R(0, 30), b = rng() < 0.15 ? a : R(0, 30), wp = rng() < 0.3 ? 0 : 2;
     const last = rng() < 0.5 ? 'X' : 'Y';
-    const m = E.scoreMatch('X', 'Y', a, b, last, bonus);
+    const m = E.scoreMatch('X', 'Y', a, b, last, wp);
     const [x, y] = m.lines;
-    const expWin = a > b ? 'X' : b > a ? 'Y' : last;
-    check(m.winner === expWin && m.peal === (a === b), 'winner');
+    if (a === b) {
+      check(m.drawn && m.winner === null && !x.won && !y.won, 'level = draw');
+      check(x.points === wp / 2 && y.points === wp / 2 && x.score === 0 && y.score === 0, 'draw shares points, diff 0');
+      check(m.goesWin === last && m.goesLose === (last === 'X' ? 'Y' : 'X'), 'last end decides winners rink');
+    } else {
+      const w = a > b ? 'X' : 'Y';
+      check(m.winner === w && m.goesWin === w && !m.drawn, 'winner');
+      check((w === 'X' ? x.points === wp && y.points === 0 : y.points === wp && x.points === 0), 'win points');
+    }
     check(x.score === a - b && y.score === b - a && x.for === y.against && y.for === x.against, 'symmetry');
-    check((x.won ? x.bonus === bonus && y.bonus === 0 : y.bonus === bonus && x.bonus === 0), 'bonus');
-    check(x.total === x.score + x.bonus && y.total === y.score + y.bonus, 'total');
+    check(x.total === x.score + x.points && y.total === y.score + y.points, 'total');
   }
   let threw = false; try { E.scoreMatch('X', 'Y', 10, 10, null, 2); } catch (e) { threw = true; }
   check(threw, 'level score without last end is refused');
+  check(E.scoreMatch('X', 'Y', 15, 10, null, 2).lines[0].points === 2 && E.scoreMatch('X', 'Y', 15, 10, null, 2).lines[0].score === 5, 'secretary example 15-10 = 2 points, +5');
 });
 
 // 6. Full competitions end to end
@@ -174,29 +181,29 @@ suite('Full competitions', 'Draw, Round 1 scores, Round 2 pairing, results: ever
     const n = R(3, pool.length), rinks = E.shuffle(pool, rng).slice(0, n);
     const pl = randomPlayers(2 * n * E.FORMATS[f].size, { seedRate: 0.2 });
     const { teams } = E.formTabsInTeams(pl, f, rng);
-    const bonus = rng() < 0.7 ? 2 : 0;
+    const wp = rng() < 0.8 ? 2 : 0;
     const r1 = E.drawRound1(teams, rinks, rng), tab = E.round2Table(rinks, rng);
-    const res1 = {}; r1.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res1[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], bonus); });
+    const res1 = {}; r1.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res1[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], wp); });
     const r2 = E.round2Matches(r1, res1, tab.table);
     const startOf = {}; r1.forEach(m => m.teams.forEach(t => startOf[t] = m.rink));
     const ids2 = r2.flatMap(m => m.teams);
     check(r2.length === n && new Set(ids2).size === 2 * n, 'every team plays game 2 once');
     check(r2.every(m => m.teams.every(t => startOf[t] !== m.rink)), 'never same rink');
-    const won1 = {}; Object.values(res1).forEach(m => { won1[m.winner] = true; won1[m.loser] = false; });
+    const won1 = {}; Object.values(res1).forEach(m => { won1[m.goesWin] = true; won1[m.goesLose] = false; });
     check(r2.filter(m => won1[m.teams[0]] !== won1[m.teams[1]]).length === n % 2, 'winners meet winners');
-    const res2 = {}; r2.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res2[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], bonus); });
+    const res2 = {}; r2.forEach(m => { const a = R(0, 25), b = rng() < 0.1 ? a : R(0, 25); res2[m.rink] = E.scoreMatch(m.teams[0], m.teams[1], a, b, m.teams[R(0, 1)], wp); });
     const st = E.standings(teams, [res1, res2], { booby: true });
     const rows = st.rows;
     check(rows.every(r => r.total === r.rounds[0].total + r.rounds[1].total && r.score === r.for - r.against), 'totals add up');
     check(rows.reduce((a, r) => a + r.score, 0) === 0, 'shots balance');
-    check(rows.reduce((a, r) => a + r.wins, 0) === 2 * n, 'one win per match');
-    check(rows.every((r, i) => i === 0 || rows[i - 1].wins > r.wins || (rows[i - 1].wins === r.wins && rows[i - 1].total >= r.total)), 'ranking order');
+    check(rows.reduce((a, r) => a + r.points, 0) === 2 * n * wp, 'points per match = win points'); check(rows.reduce((a, r) => a + r.wins + r.draws / 2, 0) === 2 * n, 'one result per match');
+    check(rows.every((r, i) => i === 0 || rows[i - 1].points > r.points || (rows[i - 1].points === r.points && (rows[i - 1].score > r.score || (rows[i - 1].score === r.score && rows[i - 1].against <= r.against)))), 'ranking: points, difference, fewest against');
     const P = Object.fromEntries(st.prizes.map(p => [p.prize, p]));
     check(P.Winners.team === rows[0].team && P['Runners-up'].team === rows[1].team, 'winners');
-    check(P['Best game 1'].value === Math.max(...rows.map(r => r.rounds[0].total)), 'best game 1');
-    check(P['Best game 2'].value === Math.max(...rows.map(r => r.rounds[1].total)), 'best game 2');
-    check(P.Booby.value === Math.min(...rows.map(r => r.total)), 'booby');
-    const cards = E.skipCards({ name: 'Test', format: f, rounds: 2, bonusOn: bonus > 0 }, teams, r1, tab.table);
+    check(!P['Best game 1'], 'no best game 1 prize');
+    const g2 = rows.map(r => r.rounds[1]); const bestP = Math.max(...g2.map(l => l.points)); const bestS = Math.max(...g2.filter(l => l.points === bestP).map(l => l.score)); check(P['Best game 2'].line.points === bestP && P['Best game 2'].line.score === bestS, 'best game 2');
+    check(P.Booby.team === rows[rows.length - 1].team, 'booby = last place'); const minP = Math.min(...rows.map(r => r.points)); const minS = Math.min(...rows.filter(r => r.points === minP).map(r => r.score)); check(P.Booby.row.points === minP && P.Booby.row.score === minS && P.Booby.row.against === Math.max(...rows.filter(r => r.points === minP && r.score === minS).map(r => r.against)), 'booby = fewest points, worst difference, most against');
+    const cards = E.skipCards({ name: 'Test', format: f, rounds: 2, bonusOn: wp > 0 }, teams, r1, tab.table);
     check(cards.length === 2 * n && cards.every(c => c.start === startOf[c.team] && c.winnersTo === tab.table[c.start].winnersTo && c.losersTo === tab.table[c.start].losersTo), 'cards');
     const pairCards = {}; cards.forEach(c => (pairCards[c.start] = pairCards[c.start] || []).push(c));
     check(Object.values(pairCards).every(([x, y]) => x.winnersTo === y.winnersTo && x.losersTo === y.losersTo), 'both cards on a rink identical');

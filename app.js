@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.2.1 (Stage 2)';
+  const VERSION = '0.3 (Stage 3)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -203,8 +203,8 @@
           <div class="row">Ends per game<div class="stepper"><button data-act="ends" data-d="-1">−</button><b>${s.ends}</b><button data-act="ends" data-d="1">+</button></div></div>
         </div>
         <div class="card"><div class="lbl">Scoring &amp; prizes</div>
-          <div class="row">Bonus points for a win<button class="tog ${s.bonusOn ? 'on' : ''}" data-act="tog" data-k="bonusOn"></button></div>
-          ${s.bonusOn ? `<div class="row">Bonus points<div class="stepper"><button data-act="bonus" data-d="-1">−</button><b>${s.bonus}</b><button data-act="bonus" data-d="1">+</button></div></div>` : ''}
+          <div class="row">Points for a win / draw<button class="tog ${s.bonusOn ? 'on' : ''}" data-act="tog" data-k="bonusOn"></button></div>
+          ${s.bonusOn ? `<div class="row"><div class="main">Win points<div class="sub">A draw gives ${s.bonus / 2} each</div></div><div class="stepper"><button data-act="bonus" data-d="-1">−</button><b>${s.bonus}</b><button data-act="bonus" data-d="1">+</button></div></div>` : ''}
           <div class="row">Booby prize<button class="tog ${s.booby ? 'on' : ''}" data-act="tog" data-k="booby"></button></div>
         </div>`,
       bottom: `<button class="btn" data-act="create">Create competition</button>`,
@@ -220,7 +220,7 @@
         },
         tog(el) { s[el.dataset.k] = !s[el.dataset.k]; render(); },
         ends(el) { s.ends = Math.max(1, Math.min(30, s.ends + +el.dataset.d)); render(); },
-        bonus(el) { s.bonus = Math.max(1, Math.min(10, s.bonus + +el.dataset.d)); render(); },
+        bonus(el) { s.bonus = Math.max(2, Math.min(10, s.bonus + 2 * el.dataset.d)); render(); },
         create() {
           if (!s.name.trim()) s.name = `${dayName()} ${FORMAT_NAMES[s.format]}`;
           const settings = Object.assign({}, s, { name: s.name.trim() });
@@ -250,10 +250,10 @@
 
   function compScreen(c, tab) {
     const s = c.settings;
-    const tabs = [['entries', 'Entries'], ['rinks', 'Rinks'], ['draw', 'Draw']];
+    const tabs = [['entries', 'Entries'], ['rinks', 'Rinks'], ['draw', 'Draw'], ['cards', 'Cards']];
     const head = `<div class="tabs">${tabs.map(([k, l]) => `<button data-act="go" data-to="#comp/${c.id}/${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-    const sub = `${s.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[s.format]} · ${s.rounds} × ${s.ends} ends${s.bonusOn ? ` · bonus ${s.bonus}` : ''}`;
-    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : fixedEntries(c));
+    const sub = `${s.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[s.format]} · ${s.rounds} × ${s.ends} ends${s.bonusOn ? ` · ${s.bonus} pts a win` : ''}`;
+    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : tab === 'cards' ? cardsTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : fixedEntries(c));
     r.title = s.name; r.sub = sub; r.back = '#home'; r.body = head + r.body;
     return r;
   }
@@ -414,8 +414,8 @@
           ${d.teams.map(t => `<div class="row tap" data-act="editteam" data-id="${t.id}"><span class="chip">${t.id}</span><div class="main">${esc(t.name)}</div><span class="small muted">${startOf(d, t.id)}</span><span class="chev">›</span></div>`).join('')}
           <p class="small muted">Tap a team to change a name (e.g. a late replacement).</p>
         </div>
-        <div class="msg ok">Skip cards, score entry and results come in the next stages.</div>`,
-      bottom: `<button class="btn alt" data-act="redraw">Make a new draw</button>`,
+        <div class="msg ok">Score entry and results come in the next stage.</div>`,
+      bottom: `<div class="btns"><button class="btn alt" data-act="redraw">New draw</button><button class="btn" data-act="go" data-to="#comp/${c.id}/cards">Skip cards</button></div>`,
       actions: {
         redraw() { confirmBox('Make a new draw? The current one will be replaced.', 'New draw', () => { makeDraw(c); render(); toast('New draw made'); }); },
         editteam(el) {
@@ -424,6 +424,45 @@
             <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Save</button></div>`);
           dd.querySelector('[data-x]').onclick = () => dd.close();
           dd.querySelector('[data-s]').onclick = () => { const v = dd.querySelector('#tn').value.trim(); if (v) { t.name = v; save(); } dd.close(); render(); };
+        },
+      },
+    };
+  }
+  // ---------- Skip cards ----------
+  function cardList(c) {
+    const s = c.settings, d = c.draw;
+    const pos = E.FORMATS[s.format].positions;
+    return E.sortRinks(d.round1.map(m => m.rink), greenOrder()).flatMap(r => {
+      const m = d.round1.find(x => x.rink === r);
+      return m.teams.slice().sort().map(id => {
+        const t = d.teams.find(x => x.id === id);
+        return { title: s.name, team: id, names: t.name, positions: pos, start: r,
+          winnersTo: d.table ? d.table[r].winnersTo : '', losersTo: d.table ? d.table[r].losersTo : '', rounds: s.rounds, showPoints: !!s.bonusOn };
+      });
+    });
+  }
+  function cardsTab(c) {
+    if (!c.draw) return { body: `<div class="empty">Make the draw first; the cards are filled in from it.</div>`, bottom: `<button class="btn" data-act="go" data-to="#comp/${c.id}/rinks">Go to rinks</button>` };
+    const cards = cardList(c), sheets = window.BowlsCards.sheets(cards);
+    const fileName = c.settings.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') + '_cards.pdf';
+    return {
+      keepScroll: true,
+      body: `
+        <div class="msg ok">${cards.length} cards on ${sheets.length} A4 page${sheets.length > 1 ? 's' : ''} · the two cards for each rink sit side by side.</div>
+        <div class="sheets">${sheets.map(sh => `<div class="sheetwrap">${window.BowlsCards.sheetSvg(sh)}</div>`).join('')}</div>`,
+      bottom: `<div class="btns"><button class="btn alt" data-act="print">Print</button><button class="btn" data-act="pdf">Share PDF</button></div>`,
+      actions: {
+        print() {
+          let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
+          pa.innerHTML = sheets.map(sh => window.BowlsCards.sheetSvg(sh)).join('');
+          setTimeout(() => window.print(), 50);
+        },
+        async pdf() {
+          let blob; try { blob = window.BowlsCards.pdf(cards); } catch (e) { toast('Could not make the PDF'); return; }
+          const file = new File([blob], fileName, { type: 'application/pdf' });
+          try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: c.settings.name + ' skip cards' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+          const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = fileName; document.body.appendChild(a); a.click(); a.remove();
+          toast('PDF saved to Downloads');
         },
       },
     };

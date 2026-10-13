@@ -74,3 +74,16 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;z-index:20}
 .version{text-align:center;font-size:14px;color:var(--muted);margin-top:16px}
 @media (min-width:900px){ main{padding-top:20px} }
+
+.sheets{display:flex;flex-direction:column;gap:14px}
+.sheetwrap{background:#fff;border:1.5px solid #9aa8a0;border-radius:6px;overflow:hidden}
+.sheetwrap svg{display:block;width:100%;height:auto}
+#printArea{display:none}
+@page{size:A4 portrait;margin:0}
+@media print{
+  body{background:#fff}
+  #app,.toast,dialog{display:none!important}
+  #printArea{display:block}
+  #printArea svg{display:block;width:210mm;height:297mm;page-break-after:always;break-after:page}
+  #printArea svg:last-child{page-break-after:auto;break-after:auto}
+}

@@ -206,48 +206,55 @@
   }
 
   // ---------- Scoring ----------
-  // One rink result -> each team's line.  lastEnd: team id that scored the last end (needed only when level).
-  function scoreMatch(teamA, teamB, shotsA, shotsB, lastEnd, bonus) {
-    if (!(shotsA >= 0 && shotsB >= 0)) throw new Error('Scores must be numbers 0 or more');
-    let winner;
-    if (shotsA > shotsB) winner = teamA; else if (shotsB > shotsA) winner = teamB;
-    else { if (lastEnd !== teamA && lastEnd !== teamB) throw new Error('Scores level: who scored the last end?'); winner = lastEnd; }
-    const line = (id, f, a) => { const b = id === winner ? (bonus || 0) : 0; return { team: id, for: f, against: a, score: f - a, bonus: b, total: f - a + b, won: id === winner }; };
-    return { winner, loser: winner === teamA ? teamB : teamA, peal: shotsA === shotsB, lines: [line(teamA, shotsA, shotsB), line(teamB, shotsB, shotsA)] };
+  // One rink result -> each team's line.
+  // A level score is a draw: points shared (half the win points each), score difference 0.
+  // lastEnd (team id that scored the last end) is still needed when level: it decides only
+  // who goes to the winners' rink and who to the losers' rink for the next game.
+  function scoreMatch(teamA, teamB, shotsA, shotsB, lastEnd, winPoints) {
+    if (!(Number.isInteger(shotsA) && Number.isInteger(shotsB) && shotsA >= 0 && shotsB >= 0)) throw new Error('Scores must be whole numbers, 0 or more');
+    const wp = winPoints || 0, drawn = shotsA === shotsB;
+    let winner = null, goesWin;
+    if (shotsA > shotsB) winner = goesWin = teamA; else if (shotsB > shotsA) winner = goesWin = teamB;
+    else { if (lastEnd !== teamA && lastEnd !== teamB) throw new Error('Scores level: who scored the last end?'); goesWin = lastEnd; }
+    const line = (id, f, a) => { const pts = drawn ? wp / 2 : id === winner ? wp : 0;
+      return { team: id, for: f, against: a, score: f - a, points: pts, total: f - a + pts, won: id === winner, drawn }; };
+    return { winner, drawn, peal: drawn, goesWin, goesLose: goesWin === teamA ? teamB : teamA, lines: [line(teamA, shotsA, shotsB), line(teamB, shotsB, shotsA)] };
   }
 
-  // Round 2 matches from Round 1 results and the table.
+  // Game 2 matches from Game 1 results and the rink table.
   function round2Matches(round1, results1, table) {
     const at = {};
     round1.forEach(m => { const r = results1[m.rink]; if (!r) throw new Error(`No score for rink ${m.rink}`);
       const t = table[m.rink];
-      (at[t.winnersTo] = at[t.winnersTo] || []).push(r.winner);
-      (at[t.losersTo] = at[t.losersTo] || []).push(r.loser); });
+      (at[t.winnersTo] = at[t.winnersTo] || []).push(r.goesWin);
+      (at[t.losersTo] = at[t.losersTo] || []).push(r.goesLose); });
     return Object.keys(at).map(rink => ({ rink, teams: at[rink] }));
   }
 
   // ---------- Results ----------
-  // rounds: [ {rink: result}, ... ]  results from scoreMatch
+  // Ranking: points, then score difference, then fewest shots against.
+  // Prizes: winners, runners-up, best last game (when more than one game), booby = last place.
+  const rankCmp = (a, b) => b.points - a.points || b.score - a.score || a.against - b.against;
   function standings(teams, rounds, opts) {
     opts = opts || {};
-    const rows = teams.map(t => ({ team: t.id, name: t.name || '', rounds: [], wins: 0, for: 0, against: 0, score: 0, bonus: 0, total: 0 }));
+    const rows = teams.map(t => ({ team: t.id, name: t.name || '', rounds: [], played: 0, wins: 0, draws: 0, losses: 0, points: 0, for: 0, against: 0, score: 0, total: 0 }));
     const byId = {}; rows.forEach(r => byId[r.team] = r);
     rounds.forEach((res, ri) => Object.values(res).forEach(m => m.lines.forEach(l => {
-      const r = byId[l.team]; r.rounds[ri] = l; r.wins += l.won ? 1 : 0;
-      r.for += l.for; r.against += l.against; r.score += l.score; r.bonus += l.bonus; r.total += l.total; })));
-    const cmp = (a, b) => b.wins - a.wins || b.total - a.total || b.for - a.for || a.against - b.against;
-    rows.sort(cmp);
-    rows.forEach((r, i) => { r.place = i > 0 && cmp(rows[i - 1], r) === 0 ? rows[i - 1].place : i + 1; });
-    const bestOf = ri => { const c = rows.filter(r => r.rounds[ri]); if (!c.length) return null;
-      return c.slice().sort((a, b) => b.rounds[ri].total - a.rounds[ri].total || b.rounds[ri].for - a.rounds[ri].for)[0]; };
+      const r = byId[l.team]; if (!r) return; r.rounds[ri] = l; r.played++;
+      if (l.won) r.wins++; else if (l.drawn) r.draws++; else r.losses++;
+      r.points += l.points; r.for += l.for; r.against += l.against; r.score += l.score; r.total += l.total; })));
+    rows.sort(rankCmp);
+    rows.forEach((r, i) => { r.place = i > 0 && rankCmp(rows[i - 1], r) === 0 ? rows[i - 1].place : i + 1; });
     const prizes = [];
-    if (rows[0]) prizes.push({ prize: 'Winners', team: rows[0].team, value: rows[0].total });
-    if (rows[1]) prizes.push({ prize: 'Runners-up', team: rows[1].team, value: rows[1].total });
-    rounds.forEach((_, ri) => { const b = bestOf(ri); if (b) prizes.push({ prize: `Best game ${ri + 1}`, team: b.team, value: b.rounds[ri].total }); });
-    if (opts.booby && rows.length) {
-      const bb = rows.slice().sort((a, b) => a.total - b.total || a.for - b.for || b.against - a.against)[0];
-      prizes.push({ prize: 'Booby', team: bb.team, value: bb.total });
+    const done = rows.filter(r => r.played);
+    if (done[0]) prizes.push({ prize: 'Winners', team: done[0].team, row: done[0] });
+    if (done[1]) prizes.push({ prize: 'Runners-up', team: done[1].team, row: done[1] });
+    const last = rounds.length - 1;
+    if (last >= 1) {
+      const c = rows.filter(r => r.rounds[last]).sort((a, b) => rankCmp(a.rounds[last], b.rounds[last]));
+      if (c[0]) prizes.push({ prize: `Best game ${last + 1}`, team: c[0].team, line: c[0].rounds[last] });
     }
+    if (opts.booby && done.length > 2) prizes.push({ prize: 'Booby', team: done[done.length - 1].team, row: done[done.length - 1] });
     return { rows, prizes };
   }
 
@@ -258,7 +265,7 @@
       const t = teams.find(x => x.id === id);
       cards.push({ title: comp.name, team: id, names: t.name || '', positions: FORMATS[comp.format].positions,
                    start: m.rink, losersTo: table ? table[m.rink].losersTo : '', winnersTo: table ? table[m.rink].winnersTo : '',
-                   rounds: comp.rounds, showBonus: !!comp.bonusOn });
+                   rounds: comp.rounds, showPoints: !!comp.bonusOn });
     }));
     return cards.sort((a, b) => a.team.length - b.team.length || (a.team < b.team ? -1 : 1));
   }
