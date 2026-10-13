@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4 (Stage 4)';
+  const VERSION = '0.4.1 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -486,27 +486,33 @@
     c.scores = c.scores || {};
     const teams = c.draw.teams.slice().sort(teamOrder), games = c.settings.rounds;
     const val = (t, g, k) => { const e = (c.scores[t] || [])[g]; return e && Number.isInteger(e[k]) ? e[k] : ''; };
-    const inp = (t, g, k) => `<input class="sc" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="next" autocomplete="off" data-t="${t}" data-g="${g}" data-k="${k}" value="${val(t, g, k)}" aria-label="Team ${t} game ${g + 1} ${k === 'f' ? 'for' : 'against'}">`;
+    const inp = (t, g, k) => `<td class="in g${g}"><input class="sc" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="next" autocomplete="off" data-t="${t}" data-g="${g}" data-k="${k}" value="${val(t, g, k)}" aria-label="Team ${t} game ${g + 1} ${k === 'f' ? 'for' : 'against'}"></td>`;
+    const gname = ['First game', 'Second game'];
     function refresh() {
       const n = E.cardsEntered(c.draw.teams, c.scores, games), warns = E.checkCards(c.draw.round1, c.draw.table, c.scores);
-      document.querySelectorAll('.srow').forEach(r => {
-        const t = r.dataset.t, ok = E.cardsEntered([{ id: t }], c.scores, games) === 1;
-        r.classList.toggle('done', ok);
-        const mine = warns.filter(w => w.teams.includes(t));
-        r.querySelector('.swarn').innerHTML = mine.map(w => `<div>⚠ ${esc(warnText(c, w, t))}</div>`).join('');
+      document.querySelectorAll('tr.srow').forEach(r => {
+        const t = r.dataset.t;
+        r.querySelector('.dn').textContent = E.cardsEntered([{ id: t }], c.scores, games) === 1 ? '✓' : '';
+        for (let g = 0; g < games; g++) r.querySelectorAll('td.g' + g).forEach(td => td.classList.toggle('bad', warns.some(w => w.game === g + 1 && w.teams.includes(t))));
       });
+      $('#swarns').innerHTML = warns.length ? `<div class="msg error">${warns.map(w => `⚠ ${esc(warnText(c, w, w.teams[0]))}`).join('<br>')}</div>` : '';
       const cnt = $('#scount'); if (cnt) cnt.innerHTML = `<b>${n}</b> of <b>${teams.length}</b> cards entered${warns.length ? ` · <b>${warns.length}</b> to check` : ''}`;
     }
     return {
       keepScroll: true,
       body: `
-        <p class="small muted" style="margin-top:0">Take the cards in letter order and type the scores off each card. ${games === 2 ? 'Four numbers per card.' : 'Two numbers per card.'}</p>
-        ${teams.map(t => `<div class="card srow" data-t="${t.id}">
-          <div class="shead"><span class="tl">${t.id}</span><span class="nm">${esc(t.name)}</span><span class="tick">✓</span></div>
-          ${Array.from({ length: games }, (_, g) => `<div class="sgame"><span class="gl">Game ${g + 1}</span><label>For ${inp(t.id, g, 'f')}</label><label>Against ${inp(t.id, g, 'a')}</label></div>`).join('')}
-          <div class="swarn"></div></div>`).join('')}`,
+        <table class="sheet-t">
+          <thead><tr class="h1"><th rowspan="2" class="tm">Team</th>${Array.from({ length: games }, (_, g) => `<th colspan="2" class="gh">${gname[g]}</th>`).join('')}<th rowspan="2" class="dn">Done</th></tr>
+          <tr class="h2">${Array.from({ length: games }, () => '<th>For</th><th>Against</th>').join('')}</tr></thead>
+          <tbody>${teams.map(t => `<tr class="srow" data-t="${t.id}"><td class="tm">${t.id}</td>${Array.from({ length: games }, (_, g) => inp(t.id, g, 'f') + inp(t.id, g, 'a')).join('')}<td class="dn"></td></tr>`).join('')}</tbody>
+        </table>
+        <div id="swarns" style="margin-top:12px"></div>`,
       bottom: `<div class="count" id="scount"></div><button class="btn" data-act="go" data-to="#comp/${c.id}/results" style="margin-top:0">Results</button>`,
       after() {
+        // freeze the two heading rows just under the title bar
+        const top = document.querySelector('header.bar').offsetHeight, h1 = document.querySelector('.sheet-t tr.h1');
+        document.querySelectorAll('.sheet-t tr.h1 th').forEach(th => th.style.top = top + 'px');
+        document.querySelectorAll('.sheet-t tr.h2 th').forEach(th => th.style.top = (top + h1.offsetHeight) + 'px');
         const all = [...document.querySelectorAll('input.sc')];
         all.forEach((el, i) => {
           el.addEventListener('input', () => {
