@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.5.1 (Ladder)';
+  const VERSION = '0.5.2 (Ladder)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -691,7 +691,9 @@
     d.querySelector('#chsel').onchange = e => {
       ch = e.target.value || null; def = null; go.disabled = true;
       const defs = ch ? E.eligibleDefenders(L, ch) : [];
-      d.querySelector('#defs').innerHTML = defs.map(id => { const f = E.canChallenge(L, ch, id).usesFree; return `<button data-d="${id}">#${L.players.indexOf(id) + 1} ${esc(nm(id))}${f ? ' · uses a free challenge' : ''}</button>`; }).join('') || '<div class="small muted">Nobody available.</div>';
+      const fl = ch ? (L.free[ch] || 0) : 0;
+      d.querySelector('#defs').innerHTML = (fl ? `<div class="msg ok" style="margin:0 0 4px">Uses one of ${esc(nm(ch))}'s free challenges (${fl} left), so anyone above may be challenged.</div>` : '')
+        + (defs.map(id => `<button data-d="${id}">#${L.players.indexOf(id) + 1} ${esc(nm(id))}</button>`).join('') || '<div class="small muted">Nobody available.</div>');
       d.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { def = b.dataset.d; d.querySelectorAll('[data-d]').forEach(x => x.classList.toggle('on', x === b)); go.disabled = false; });
     };
     d.querySelector('[data-x]').onclick = () => d.close();
