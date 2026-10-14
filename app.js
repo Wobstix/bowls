@@ -2,7 +2,8 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.5.4 (Ladder)';
+  const VERSION = '0.6.0 (Draw cards)';
+  const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -86,7 +87,7 @@
     const active = state.members.filter(m => !m.left).length;
     const list = comps.length ? comps.map(c => `
       <div class="row tap" data-act="go" data-to="#comp/${c.id}">
-        <div class="main"><b>${esc(c.settings.name)}</b><div class="sub">${c.settings.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[c.settings.format]} · ${c.settings.rounds} × ${c.settings.ends} ends · ${fmtDate(c.created)}</div></div>
+        <div class="main"><b>${esc(c.settings.name)}</b><div class="sub">${MODE_NAMES[c.settings.mode]} · ${FORMAT_NAMES[c.settings.format]} · ${c.settings.rounds} × ${c.settings.ends} ends · ${fmtDate(c.created)}</div></div>
         <span class="chip ${c.status === 'entries' ? 'grey' : ''}">${statusLabel(c)}</span><span class="chev">›</span></div>`).join('')
       : `<div class="empty">No competitions yet.</div>`;
     return {
@@ -201,7 +202,8 @@
           <div class="field" style="margin-top:12px"><label for="cname">Name</label><input type="text" id="cname" value="${esc(s.name)}"></div>
         </div>
         <div class="card">
-          <div class="lbl">Teams</div>${seg('mode', [['tabsin', 'Tabs-in'], ['fixed', 'Fixed teams']])}
+          <div class="lbl">Teams</div>${seg('mode', [['tabsin', 'Tabs-in'], ['fixed', 'Fixed teams'], ['cards', 'Draw cards']])}
+          ${s.mode === 'cards' ? `<p class="small muted" style="margin:10px 0 0">Enter only the number of teams. Cards are printed with a letter and rinks but no names; teams pick a card and write their names on it.</p>` : ''}
           ${s.mode === 'tabsin' ? `<div class="lbl" style="margin-top:12px">Draw</div>${seg('draw', [['random', 'Random'], ['seeded', 'Seeded']])}` : ''}
         </div>
         <div class="card">
@@ -231,7 +233,7 @@
           if (!s.name.trim()) s.name = `${dayName()} ${FORMAT_NAMES[s.format]}`;
           const settings = Object.assign({}, s, { name: s.name.trim() });
           state.memory = E.rememberSettings(state.memory, settings);
-          const c = { id: uid(), created: Date.now(), settings, status: 'entries', present: [], visitors: [], fixedTeams: [], rinks: [], draw: null };
+          const c = { id: uid(), created: Date.now(), settings, status: 'entries', present: [], visitors: [], fixedTeams: [], teamCount: 0, rinks: [], draw: null };
           state.competitions.push(c); save(); newDraft = null; go(`#comp/${c.id}/entries`);
         },
       },
@@ -243,9 +245,9 @@
     const ms = c.present.map(id => state.members.find(m => m.id === id)).filter(Boolean);
     return ms.concat(c.visitors);
   }
-  function teamCountOf(c) { return c.settings.mode === 'tabsin' ? E.tabsInCount(entrants(c).length, c.settings.format).teams : c.fixedTeams.length; }
+  function teamCountOf(c) { return c.settings.mode === 'tabsin' ? E.tabsInCount(entrants(c).length, c.settings.format).teams : c.settings.mode === 'cards' ? (c.teamCount || 0) : c.fixedTeams.length; }
   function checks(c) {
-    return E.checkEntries({ format: c.settings.format, mode: c.settings.mode, playerCount: entrants(c).length, teamCount: c.fixedTeams.length,
+    return E.checkEntries({ format: c.settings.format, mode: c.settings.mode, playerCount: entrants(c).length, teamCount: teamCountOf(c),
       rinksInUse: c.rinks.length, rounds: c.settings.rounds });
   }
   function clearDraw(c) { c.draw = null; c.scores = {}; c.status = 'entries'; }
@@ -265,8 +267,8 @@
     const s = c.settings;
     const tabs = [['entries', 'Entries'], ['rinks', 'Rinks'], ['draw', 'Draw'], ['cards', 'Cards'], ['scores', 'Scores'], ['results', 'Results']];
     const head = `<div class="tabs">${tabs.map(([k, l]) => `<button data-act="go" data-to="#comp/${c.id}/${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-    const sub = `${s.mode === 'tabsin' ? 'Tabs-in' : 'Fixed teams'} · ${FORMAT_NAMES[s.format]} · ${s.rounds} × ${s.ends} ends${s.bonusOn ? ` · ${s.bonus} pts a win` : ''}`;
-    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : tab === 'cards' ? cardsTab(c) : tab === 'scores' ? scoresTab(c) : tab === 'results' ? resultsTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : fixedEntries(c));
+    const sub = `${MODE_NAMES[s.mode]} · ${FORMAT_NAMES[s.format]} · ${s.rounds} × ${s.ends} ends${s.bonusOn ? ` · ${s.bonus} pts a win` : ''}`;
+    const r = tab === 'rinks' ? rinksTab(c) : tab === 'draw' ? drawTab(c) : tab === 'cards' ? cardsTab(c) : tab === 'scores' ? scoresTab(c) : tab === 'results' ? resultsTab(c) : (s.mode === 'tabsin' ? tabsInEntries(c) : s.mode === 'cards' ? cardsEntries(c) : fixedEntries(c));
     r.title = s.name; r.sub = sub; r.back = '#home'; r.body = head + r.body;
     return r;
   }
@@ -277,7 +279,7 @@
       const n = entrants(c).length, k = E.tabsInCount(n, s.format);
       return `<div class="count"><b>${n}</b> player${n === 1 ? '' : 's'} → <b>${k.teams}</b> teams on <b>${k.rinks}</b> rink${k.rinks === 1 ? '' : 's'}${k.leftover ? ` · <b>${k.leftover}</b> left over (add ${k.needForNextRink} for another rink)` : ''}</div>`;
     }
-    const t = c.fixedTeams.length;
+    const t = teamCountOf(c);
     return `<div class="count"><b>${t}</b> team${t === 1 ? '' : 's'} → <b>${Math.floor(t / 2)}</b> rink${Math.floor(t / 2) === 1 ? '' : 's'}${t % 2 ? ' · <b>odd number</b> — one more team needed' : ''}</div>`;
   }
 
@@ -355,6 +357,27 @@
     };
   }
 
+  function cardsEntries(c) {
+    const n = c.teamCount || 0, max = clubRinks().length * 2;
+    const setN = v => guardDrawn(c, () => { c.teamCount = Math.max(0, Math.min(max, v)); save(); render(); });
+    return {
+      keepScroll: true,
+      body: `
+        ${c.draw ? `<div class="msg warn">The draw has been made. Changing the number of teams will clear it.</div>` : ''}
+        <div class="card"><div class="lbl">Number of teams</div>
+          <div class="row"><div class="main">Teams<div class="sub">Two teams to a rink</div></div><div class="stepper"><button data-act="tn" data-d="-2" aria-label="Fewer">−</button><input type="text" id="tcount" inputmode="numeric" maxlength="2" value="${n || ''}" style="width:70px;text-align:center;font-size:21px;font-weight:700;padding:8px 4px"><button data-act="tn" data-d="2" aria-label="More">+</button></div></div>
+          <p class="small muted" style="margin:8px 0 0">The cards come out with a team letter, the starting rink and where winners and losers go, but no names. Lay them face down; each team picks one and writes its names on it. When the cards come back, type the names in on the Scores tab.</p>
+        </div>
+        <button class="btn danger" data-act="delcomp" style="margin-top:28px">Delete this competition</button>`,
+      bottom: countBar(c) + `<button class="btn" data-act="go" data-to="#comp/${c.id}/rinks" style="margin-top:0">Next: rinks</button>`,
+      after() { const t = $('#tcount'); t.onchange = () => { const v = parseInt(t.value.replace(/\D/g, ''), 10) || 0; if (v !== n) setN(v); }; t.onkeydown = e => { if (e.key === 'Enter') t.blur(); }; },
+      actions: {
+        tn(el) { setN(n + +el.dataset.d); },
+        delcomp() { confirmBox(`Delete “${c.settings.name}”? This cannot be undone.`, 'Delete', () => { state.competitions = state.competitions.filter(x => x.id !== c.id); save(); go('#home'); }); },
+      },
+    };
+  }
+
   // Picks rinks so that Game 2 can stay on the same green where possible, then uses as few greens as possible.
   function pickRinks(need, rounds) {
     const greens = state.club.greens; let best = null;
@@ -403,7 +426,8 @@
       if (k.leftover) { toast(`${k.leftover} player(s) left over — adjust entries first`); return; }
       const players = all.map(p => ({ id: p.id, name: p.name, group: p.group, seed: s.draw === 'seeded' && !!p.seed }));
       const f = E.formTabsInTeams(players, s.format); teams = f.teams.map(t => ({ id: t.id, name: t.name, players: t.players.map(p => ({ name: p.name, group: p.group, position: p.position, out: p.outOfPosition })) })); oop = f.outOfPosition;
-    } else teams = c.fixedTeams.map((t, i) => ({ id: E.teamLetter(i), name: t.name }));
+    } else if (s.mode === 'cards') teams = Array.from({ length: c.teamCount }, (_, i) => ({ id: E.teamLetter(i), name: '' }));
+    else teams = c.fixedTeams.map((t, i) => ({ id: E.teamLetter(i), name: t.name }));
     const rinks = E.sortRinks(c.rinks, greenOrder());
     const round1 = E.drawRound1(teams, rinks);
     const t2 = s.rounds === 2 ? E.round2Table(rinks) : null;
@@ -427,8 +451,8 @@
           ${order.map(r => `<tr><td><b>${r}</b></td><td>${byRink[r].teams.join(' v ')}</td>${two ? `<td class="c">${d.table[r].winnersTo}</td><td class="c">${d.table[r].losersTo}</td>` : ''}</tr>`).join('')}</table>
         </div>
         <div class="card"><div class="lbl">Teams${s.mode === 'tabsin' ? ' · skip listed first' : ''}</div>
-          ${d.teams.map(t => `<div class="row tap" data-act="editteam" data-id="${t.id}"><span class="chip">${t.id}</span><div class="main">${esc(t.name)}</div><span class="small muted">${startOf(d, t.id)}</span><span class="chev">›</span></div>`).join('')}
-          <p class="small muted">Tap a team to change a name (e.g. a late replacement).</p>
+          ${d.teams.map(t => `<div class="row tap" data-act="editteam" data-id="${t.id}"><span class="chip">${t.id}</span><div class="main">${t.name ? esc(t.name) : '<span class="muted">No names yet</span>'}</div><span class="small muted">${startOf(d, t.id)}</span><span class="chev">›</span></div>`).join('')}
+          <p class="small muted">${s.mode === 'cards' ? 'Names are written on the cards by the teams. Type them in on the Scores tab when the cards come back.' : 'Tap a team to change a name (e.g. a late replacement).'}</p>
         </div>
         `,
       bottom: `<div class="btns"><button class="btn alt" data-act="redraw">New draw</button><button class="btn" data-act="go" data-to="#comp/${c.id}/cards">Skip cards</button></div>`,
@@ -439,7 +463,7 @@
           const dd = dialog(`<h3 style="margin:0 0 12px">Team ${t.id}</h3><div class="field"><label>Names (skip first)</label><input type="text" id="tn" value="${esc(t.name)}"></div>
             <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Save</button></div>`);
           dd.querySelector('[data-x]').onclick = () => dd.close();
-          dd.querySelector('[data-s]').onclick = () => { const v = dd.querySelector('#tn').value.trim(); if (v) { t.name = v; save(); } dd.close(); render(); };
+          dd.querySelector('[data-s]').onclick = () => { const v = dd.querySelector('#tn').value.trim(); if (v || s.mode === 'cards') { t.name = v; save(); } dd.close(); render(); };
         },
       },
     };
@@ -505,7 +529,8 @@
         for (let g = 0; g < games; g++) r.querySelectorAll('td.g' + g).forEach(td => td.classList.toggle('bad', warns.some(w => w.game === g + 1 && w.teams.includes(t))));
       });
       $('#swarns').innerHTML = warns.length ? `<div class="msg error">${warns.map(w => `⚠ ${esc(warnText(c, w, w.teams[0]))}`).join('<br>')}</div>` : '';
-      const cnt = $('#scount'); if (cnt) cnt.innerHTML = `<b>${n}</b> of <b>${teams.length}</b> cards entered${warns.length ? ` · <b>${warns.length}</b> to check` : ''}`;
+      const noNames = c.settings.mode === 'cards' ? c.draw.teams.filter(x => !x.name).length : 0;
+      const cnt = $('#scount'); if (cnt) cnt.innerHTML = `<b>${n}</b> of <b>${teams.length}</b> cards entered${warns.length ? ` · <b>${warns.length}</b> to check` : ''}${noNames ? ` · <b>${noNames}</b> without names` : ''}`;
     }
     return {
       keepScroll: true,
@@ -534,7 +559,12 @@
           const row = document.querySelector(`tr.srow[data-t="${t}"]`); if (!row) return;
           const team = teams.find(x => x.id === t);
           row.classList.add('cur');
-          row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}">Team ${t}: ${esc(team.name)}</td></tr>`);
+          if (c.settings.mode === 'cards') {
+            row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}"><label>Team ${t} names (skip first)<input type="text" class="nm" autocomplete="off" enterkeyhint="done" value="${esc(team.name)}" placeholder="Type the names off the card"></label></td></tr>`);
+            const ni = document.querySelector('tr.namesrow input.nm'), dt = c.draw.teams.find(x => x.id === t);
+            ni.addEventListener('input', () => { dt.name = team.name = ni.value.trim(); save(); refresh(); });
+            ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ni.blur(); } });
+          } else row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}">Team ${t}: ${esc(team.name)}</td></tr>`);
         };
         screen.actions = Object.assign(screen.actions || {}, { names(el) { showNames(el.dataset.t); } });
         all.forEach((el, i) => {
@@ -577,7 +607,7 @@
         ${n < total ? `<div class="msg warn">Results so far — ${total - n} card${total - n > 1 ? 's' : ''} still to enter.</div>` : '<div class="msg ok">All cards entered.</div>'}
         ${warns.length ? `<div class="msg error">${warns.length} pair${warns.length > 1 ? 's' : ''} of cards don’t agree. Check them on the Scores tab.</div>` : ''}
         <div class="card"><div class="lbl">Prizes</div>
-          ${st.prizes.map(p => `<div class="row"><div class="main"><b>${esc(p.prize)}</b><div class="sub">Team ${p.team} · ${esc(name(p.team))}</div></div><b>${prizeText(p, wp)}</b></div>`).join('') || '<div class="muted">—</div>'}
+          ${st.prizes.map(p => `<div class="row"><div class="main"><b>${esc(p.prize)}</b><div class="sub">Team ${p.team}${name(p.team) ? ` · ${esc(name(p.team))}` : ''}</div></div><b>${prizeText(p, wp)}</b></div>`).join('') || '<div class="muted">—</div>'}
         </div>
         <div class="card" style="overflow-x:auto"><div class="lbl">Placings</div>
           <table><tr><th>#</th><th>Team</th>${wp ? '<th class="c">Pts</th>' : ''}<th class="c">For</th><th class="c">Agst</th><th class="c">Diff</th></tr>
@@ -588,9 +618,9 @@
       actions: {
         async share() {
           const lines = [`${c.settings.name} — results${n < total ? ' (so far)' : ''}`, ''];
-          st.prizes.forEach(p => lines.push(`${p.prize}: Team ${p.team} (${name(p.team)}) ${prizeText(p, wp)}`));
+          st.prizes.forEach(p => lines.push(`${p.prize}: Team ${p.team}${name(p.team) ? ` (${name(p.team)})` : ''} ${prizeText(p, wp)}`));
           lines.push('', 'Placings:');
-          rows.forEach(r => lines.push(`${r.place}. Team ${r.team} – ${wp ? `${r.points} pts, ` : ''}${signed(r.score)} (${r.for}–${r.against}) – ${r.name}`));
+          rows.forEach(r => lines.push(`${r.place}. Team ${r.team} – ${wp ? `${r.points} pts, ` : ''}${signed(r.score)} (${r.for}–${r.against})${r.name ? ` – ${r.name}` : ''}`));
           const text = lines.join('\n');
           try { if (navigator.share) { await navigator.share({ title: c.settings.name + ' results', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
           try { await navigator.clipboard.writeText(text); toast('Results copied — paste into WhatsApp'); } catch (e) { toast('Could not share'); }

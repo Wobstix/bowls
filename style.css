@@ -132,3 +132,5 @@ input[type=date]{width:100%;font:inherit;padding:10px 12px;border:2px solid #5d6
 dialog{max-height:90vh;overflow:auto}
 .about-link{color:var(--green);font-weight:700}
 a.btn{display:block}
+.sheet-t tr.namesrow label{display:flex;flex-direction:column;gap:5px}
+.sheet-t tr.namesrow input.nm{width:100%;font:inherit;font-size:18px;font-weight:600;padding:9px 10px;border:2px solid #fff;border-radius:8px;background:#fff;color:#000}
