@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4.4 (Stage 4)';
+  const VERSION = '0.4.5 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -612,7 +612,7 @@
           <p class="small">One file holds the club set-up, members and all competitions. Send it to yourself or to the other organiser by WhatsApp or email.</p>
           <button class="btn" data-act="backup">Save / share backup</button></div>
         <div class="card"><div class="lbl">Restore</div>
-          <p class="small">Loads a backup file onto this phone. <b>Everything on this phone is replaced</b> by what is in the file.</p>
+          <p class="small">Loads a backup file into this app. <b>The Bowls app's club set-up, members and competitions are replaced</b> by what is in the file. Nothing else on the phone is touched.</p>
           <input type="file" id="restore" accept=".json,application/json" style="display:none">
           <button class="btn alt" data-act="restore">Choose backup file</button></div>`,
       after() {
@@ -622,7 +622,7 @@
           rd.onload = () => {
             let data; try { data = JSON.parse(rd.result); } catch (err) { toast('That file is not a backup'); return; }
             if (!data || data.app !== 'bowls' || !data.state || !data.state.club) { toast('That file is not a Bowls backup'); return; }
-            confirmBox(`Replace everything on this phone with the backup of “${data.state.club.name}” (${fmtDate(data.saved)})?`, 'Replace', () => {
+            confirmBox(`Replace this app's club set-up, members and competitions with the backup of “${data.state.club.name}” (${fmtDate(data.saved)})? Nothing else on the phone is affected.`, 'Replace', () => {
               state = Object.assign(blank(), data.state); save(); toast('Backup restored'); go('#home');
             });
           };
