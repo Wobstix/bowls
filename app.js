@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.6.0 (Draw cards)';
+  const VERSION = '0.6.1 (Draw cards)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -560,13 +560,16 @@
           const team = teams.find(x => x.id === t);
           row.classList.add('cur');
           if (c.settings.mode === 'cards') {
-            row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}"><label>Team ${t} names (skip first)<input type="text" class="nm" autocomplete="off" enterkeyhint="done" value="${esc(team.name)}" placeholder="Type the names off the card"></label></td></tr>`);
+            row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}"><label>Team ${t} names (skip first)<input type="text" class="nm" autocomplete="off" enterkeyhint="next" value="${esc(team.name)}" placeholder="Type the names off the card"></label></td></tr>`);
             const ni = document.querySelector('tr.namesrow input.nm'), dt = c.draw.teams.find(x => x.id === t);
             ni.addEventListener('input', () => { dt.name = team.name = ni.value.trim(); save(); refresh(); });
-            ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ni.blur(); } });
+            ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector(`input.sc[data-t="${t}"][data-g="0"][data-k="f"]`); if (f) f.focus(); } });
           } else row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}">Team ${t}: ${esc(team.name)}</td></tr>`);
         };
-        screen.actions = Object.assign(screen.actions || {}, { names(el) { showNames(el.dataset.t); } });
+        const cardsMode = c.settings.mode === 'cards';
+        // Draw cards: each card is entered top to bottom, names first, then the scores
+        const focusNames = t => { showNames(t); const ni = document.querySelector('tr.namesrow input.nm'); if (ni) { ni.focus(); ni.scrollIntoView({ block: 'center' }); } };
+        screen.actions = Object.assign(screen.actions || {}, { names(el) { if (cardsMode) focusNames(el.dataset.t); else showNames(el.dataset.t); } });
         all.forEach((el, i) => {
           el.addEventListener('input', () => {
             el.value = el.value.replace(/\D/g, '').slice(0, 2);
@@ -575,7 +578,13 @@
             arr[g] = arr[g] || {}; arr[g][k] = el.value === '' ? null : parseInt(el.value, 10);
             c.status = statusLabel(c).toLowerCase(); save(); refresh();
           });
-          el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const nx = all[i + 1]; if (nx) nx.focus(); else el.blur(); } });
+          el.addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const nx = all[i + 1];
+            if (cardsMode && (!nx || nx.dataset.t !== el.dataset.t)) { if (nx) focusNames(nx.dataset.t); else el.blur(); return; }
+            if (nx) nx.focus(); else el.blur();
+          });
           el.addEventListener('focus', () => { el.select(); showNames(el.dataset.t); });
         });
         refresh();
