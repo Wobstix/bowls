@@ -2,17 +2,18 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4.6 (Stage 4)';
+  const VERSION = '0.5 (Ladder)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
 
   // ---------- Storage ----------
   let state;
-  function blank() { return { club: null, members: [], memory: {}, competitions: [] }; }
+  function blank() { return { club: null, members: [], memory: {}, competitions: [], ladder: null }; }
   function load() {
     try { state = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || 'null') || {}); }
     catch (e) { state = blank(); }
+    if (!state.ladder) state.ladder = E.newLadder();
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -59,6 +60,7 @@
     else if (parts[0] === 'members') r = membersScreen();
     else if (parts[0] === 'new') r = newScreen();
     else if (parts[0] === 'backup') r = backupScreen();
+    else if (parts[0] === 'ladder') r = ladderScreen();
     else if (parts[0] === 'comp' && comp(parts[1])) r = compScreen(comp(parts[1]), parts[2] || 'entries');
     else r = homeScreen();
     screen = r;
@@ -91,6 +93,9 @@
       body: `
         <button class="btn" data-act="go" data-to="#new" style="margin:0 0 14px">+ New competition</button>
         <div class="card"><div class="lbl">Competitions</div>${list}</div>
+        <div class="card"><div class="lbl">Club ladder</div>
+          <div class="row tap" data-act="go" data-to="#ladder"><div class="main">Club ladder<div class="sub">${state.ladder.players.length} players${(() => { const n = state.ladder.challenges.filter(c => c.status === 'open').length; return n ? ` · ${n} challenge${n > 1 ? 's' : ''} to play` : ''; })()}</div></div><span class="chev">›</span></div>
+        </div>
         <div class="card"><div class="lbl">Club</div>
           <div class="row tap" data-act="go" data-to="#members"><div class="main">Members<div class="sub">${active} active</div></div><span class="chev">›</span></div>
           <div class="row tap" data-act="go" data-to="#setup"><div class="main">Greens &amp; rinks<div class="sub">Change greens or number of rinks</div></div><span class="chev">›</span></div>
@@ -603,6 +608,131 @@
 
   function startOf(d, id) { const m = d.round1.find(x => x.teams.includes(id)); return m ? m.rink : ''; }
 
+  // ---------- Club ladder ----------
+  function todayISO() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function shortDate(iso) { return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }
+  let ladderEdit = false;
+  function ladderScreen() {
+    const L = state.ladder, today = todayISO();
+    const nm = id => { const m = state.members.find(x => x.id === id); return m ? m.name : '(removed)'; };
+    const pos = id => L.players.indexOf(id) + 1;
+    const open = L.challenges.filter(c => c.status === 'open').sort((a, b) => a.date < b.date ? -1 : 1);
+    const busy = new Set(open.flatMap(c => [c.challenger, c.defender]));
+    const rows = L.players.map((id, i) => `<div class="row lrow">
+        <span class="lpos">${i + 1}</span>
+        <div class="main"><b>${esc(nm(id))}</b>${(L.free[id] || 0) > 0 ? ` <span class="chip">${L.free[id]} free</span>` : ''}${busy.has(id) ? ' <span class="chip grey">challenge</span>' : ''}</div>
+        ${ladderEdit ? `<span class="ledit"><button data-act="lup" data-id="${id}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">▲</button><button data-act="ldown" data-id="${id}" ${i === L.players.length - 1 ? 'disabled' : ''} aria-label="Move down">▼</button><button data-act="lrem" data-id="${id}" class="lx" aria-label="Remove">✕</button></span>` : ''}
+      </div>`).join('');
+    const chRows = open.map(c => {
+      const od = E.isOverdue(c, today);
+      return `<div class="row tap" data-act="ch" data-id="${c.id}"><div class="main"><b>#${pos(c.challenger)} ${esc(nm(c.challenger))}</b> challenges <b>#${pos(c.defender)} ${esc(nm(c.defender))}</b>
+        <div class="sub ${od ? 'overdue' : ''}">${od ? 'OVERDUE — ' : ''}challenged ${shortDate(c.date)} · play by ${shortDate(E.dueDate(c))}</div></div><span class="chev">›</span></div>`;
+    }).join('');
+    return {
+      title: 'Club ladder', sub: `${L.players.length} players · ${L.open ? 'OPEN: any position' : `up to ${E.LADDER_REACH} places up`}`, back: '#home', keepScroll: true,
+      body: `
+        <div class="card"><div class="row"><div class="main">Open ladder<div class="sub">On: anyone above may be challenged. Off: up to ${E.LADDER_REACH} places up.</div></div><button class="tog ${L.open ? 'on' : ''}" data-act="lopen"></button></div></div>
+        ${open.length ? `<div class="card"><div class="lbl">Challenges to play (${open.length})</div>${chRows}<p class="small muted">Tap a challenge to enter the result, a walkover or to cancel it.</p></div>` : ''}
+        <div class="card"><div class="lbl">Ladder${ladderEdit ? ' · arrange order' : ''}</div>
+          ${L.players.length ? rows : `<div class="empty">No players yet. Tap Add players and put them in order (e.g. from the last club singles).</div>`}
+        </div>
+        <div class="btns"><button class="btn alt" data-act="ladd">Add players</button><button class="btn alt" data-act="ledit">${ladderEdit ? 'Done' : 'Arrange order'}</button></div>
+        <div class="btns"><button class="btn alt" data-act="lhist">Results</button><button class="btn alt" data-act="lshare">Share ladder</button></div>`,
+      bottom: L.players.length > 1 ? `<button class="btn" data-act="lnew">+ New challenge</button>` : '',
+      actions: {
+        lopen() { L.open = !L.open; save(); render(); toast(L.open ? 'Ladder open: any position' : `Ladder closed: up to ${E.LADDER_REACH} places`); },
+        ledit() { ladderEdit = !ladderEdit; render(); },
+        lup(el) { const i = L.players.indexOf(el.dataset.id); if (i > 0) { [L.players[i - 1], L.players[i]] = [L.players[i], L.players[i - 1]]; save(); render(); } },
+        ldown(el) { const i = L.players.indexOf(el.dataset.id); if (i < L.players.length - 1) { [L.players[i + 1], L.players[i]] = [L.players[i], L.players[i + 1]]; save(); render(); } },
+        lrem(el) { const id = el.dataset.id; confirmBox(`Take ${nm(id)} off the ladder? Everyone below moves up one${busy.has(id) ? ', and their open challenge is cancelled' : ''}.`, 'Remove', () => { E.ladderRemove(L, id); save(); render(); }); },
+        ladd() { ladderAddDialog(); },
+        lnew() { challengeDialog(); },
+        ch(el) { challengeActionDialog(L.challenges.find(c => c.id === el.dataset.id)); },
+        lhist() { ladderHistoryDialog(); },
+        async lshare() {
+          const lines = [`${state.club.name} — club ladder (${shortDate(today)})`, ''];
+          L.players.forEach((id, i) => lines.push(`${i + 1}. ${nm(id)}`));
+          if (open.length) { lines.push('', 'Challenges to play:'); open.forEach(c => lines.push(`${nm(c.challenger)} v ${nm(c.defender)} – by ${shortDate(E.dueDate(c))}`)); }
+          const text = lines.join('\n');
+          try { if (navigator.share) { await navigator.share({ title: 'Club ladder', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+          try { await navigator.clipboard.writeText(text); toast('Ladder copied'); } catch (e) { toast('Could not share'); }
+        },
+      },
+    };
+  }
+  function ladderAddDialog() {
+    const L = state.ladder, avail = state.members.filter(m => !m.left && !L.players.includes(m.id)).sort(byName);
+    let newEntrant = L.players.length > 0; const picked = new Set();
+    const d = dialog(`<h3 style="margin:0 0 6px">Add players</h3>
+      <p class="small muted" style="margin:0 0 8px">They are added at the bottom, in the order you tick them.</p>
+      ${avail.length ? `<div class="pick">${avail.map(m => `<div class="row tap" data-m="${m.id}"><span class="check"></span><div class="main">${esc(m.name)}</div></div>`).join('')}</div>` : '<div class="empty">Everyone on the members list is already on the ladder.</div>'}
+      <div class="row"><div class="main">New entrants<div class="sub">Get ${E.FREE_CHALLENGES} free challenges (any position). Switch off when first setting up the ladder.</div></div><button class="tog ${newEntrant ? 'on' : ''}" data-ne></button></div>
+      <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Add</button></div>`);
+    const order = [];
+    d.querySelectorAll('[data-m]').forEach(r => r.onclick = () => { const id = r.dataset.m, ck = r.querySelector('.check');
+      if (picked.has(id)) { picked.delete(id); order.splice(order.indexOf(id), 1); } else { picked.add(id); order.push(id); }
+      d.querySelectorAll('[data-m]').forEach(x => { const i = order.indexOf(x.dataset.m), c = x.querySelector('.check'); c.classList.toggle('on', i >= 0); c.textContent = i >= 0 ? i + 1 : ''; }); });
+    d.querySelector('[data-ne]').onclick = e => { newEntrant = !newEntrant; e.target.classList.toggle('on', newEntrant); };
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-s]').onclick = () => { if (!order.length) { d.close(); return; } E.ladderAdd(L, order, newEntrant); save(); d.close(); render(); toast(`${order.length} added`); };
+  }
+  function challengeDialog() {
+    const L = state.ladder, nm = id => (state.members.find(x => x.id === id) || {}).name || '(removed)';
+    const free = L.players.filter(id => !E.openChallengeOf(L, id) && E.eligibleDefenders(L, id).length);
+    if (!free.length) { toast('Nobody can challenge at the moment'); return; }
+    let ch = null, def = null;
+    const d = dialog(`<h3 style="margin:0 0 10px">New challenge</h3>
+      <div class="field"><label>Challenger</label><select id="chsel"><option value="">Choose…</option>${free.map(id => `<option value="${id}">#${L.players.indexOf(id) + 1} ${esc(nm(id))}</option>`).join('')}</select></div>
+      <div class="field"><label>Challenges</label><div id="defs" class="groups"><div class="small muted">Choose the challenger first.</div></div></div>
+      <div class="field"><label>Date of challenge</label><input type="date" id="chdate" value="${todayISO()}"></div>
+      <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s disabled>Issue</button></div>`);
+    const go = d.querySelector('[data-s]');
+    d.querySelector('#chsel').onchange = e => {
+      ch = e.target.value || null; def = null; go.disabled = true;
+      const defs = ch ? E.eligibleDefenders(L, ch) : [];
+      d.querySelector('#defs').innerHTML = defs.map(id => { const f = E.canChallenge(L, ch, id).usesFree; return `<button data-d="${id}">#${L.players.indexOf(id) + 1} ${esc(nm(id))}${f ? ' · uses a free challenge' : ''}</button>`; }).join('') || '<div class="small muted">Nobody available.</div>';
+      d.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { def = b.dataset.d; d.querySelectorAll('[data-d]').forEach(x => x.classList.toggle('on', x === b)); go.disabled = false; });
+    };
+    d.querySelector('[data-x]').onclick = () => d.close();
+    go.onclick = () => { const date = d.querySelector('#chdate').value || todayISO();
+      try { E.issueChallenge(L, ch, def, date, uid); save(); d.close(); render(); toast(`Play by ${shortDate(E.addDays(date, E.LADDER_DAYS))}`); } catch (e) { toast(e.message); } };
+  }
+  function challengeActionDialog(c) {
+    const L = state.ladder, nm = id => (state.members.find(x => x.id === id) || {}).name || '(removed)';
+    if (!c) return;
+    const d = dialog(`<h3 style="margin:0 0 4px">${esc(nm(c.challenger))} v ${esc(nm(c.defender))}</h3>
+      <p class="small muted" style="margin:0 0 10px">#${L.players.indexOf(c.challenger) + 1} challenges #${L.players.indexOf(c.defender) + 1} · play by ${shortDate(E.dueDate(c))} · first to 21</p>
+      <div class="lscore"><label>${esc(nm(c.challenger))}<input class="sc" id="sC" type="text" inputmode="numeric" maxlength="2"></label>
+      <label>${esc(nm(c.defender))}<input class="sc" id="sD" type="text" inputmode="numeric" maxlength="2"></label></div>
+      <div class="field"><label>Date played</label><input type="date" id="rdate" value="${todayISO()}"></div>
+      <button class="btn" data-s>Save result</button>
+      <button class="btn alt" data-w>Not played — ${esc(nm(c.challenger))} wins</button>
+      <button class="btn danger" data-c>Cancel challenge</button>
+      <button class="btn alt" data-x>Close</button>`);
+    const num = id => { const v = d.querySelector(id).value.replace(/\D/g, ''); return v === '' ? null : parseInt(v, 10); };
+    d.querySelectorAll('input.sc').forEach(i => i.oninput = () => i.value = i.value.replace(/\D/g, '').slice(0, 2));
+    d.querySelector('[data-x]').onclick = () => d.close();
+    const done = (msg) => { save(); d.close(); render(); toast(msg); };
+    d.querySelector('[data-s]').onclick = () => {
+      const a = num('#sC'), b = num('#sD'), date = d.querySelector('#rdate').value || todayISO();
+      if (a === null || b === null || a === b) { toast('Enter both scores; one player must win'); return; }
+      const finish = () => { const r = E.recordResult(L, c.id, a, b, date); done(r.moved ? `${nm(r.winner)} moves up to #${L.players.indexOf(r.winner) + 1}` : `${nm(r.winner)} keeps #${L.players.indexOf(r.winner) + 1}`); };
+      if (Math.max(a, b) !== 21) { d.close(); confirmBox(`The winner has ${Math.max(a, b)}, not 21. Save anyway?`, 'Save', finish); } else finish();
+    };
+    d.querySelector('[data-w]').onclick = () => { d.close(); confirmBox(`Record a walkover: ${nm(c.challenger)} wins because the challenge was not played?`, 'Walkover', () => { const r = E.recordWalkover(L, c.id, todayISO()); save(); render(); toast(r.moved ? `${nm(c.challenger)} moves up to #${L.players.indexOf(c.challenger) + 1}` : 'Recorded'); }); };
+    d.querySelector('[data-c]').onclick = () => { d.close(); confirmBox('Cancel this challenge? Nothing on the ladder changes.', 'Cancel challenge', () => { E.cancelChallenge(L, c.id, true); save(); render(); }); };
+  }
+  function ladderHistoryDialog() {
+    const L = state.ladder, nm = id => (state.members.find(x => x.id === id) || {}).name || '(removed)';
+    const done = L.challenges.filter(c => c.status === 'played' || c.status === 'walkover').sort((a, b) => (b.resultDate || '').localeCompare(a.resultDate || ''));
+    const d = dialog(`<h3 style="margin:0 0 10px">Ladder results</h3>
+      ${done.length ? done.map(c => { const w = c.winner, l = w === c.challenger ? c.defender : c.challenger;
+        const sc = c.status === 'walkover' ? 'walkover' : `${Math.max(c.shotsC, c.shotsD)}–${Math.min(c.shotsC, c.shotsD)} (+${Math.abs(c.shotsC - c.shotsD)})`;
+        return `<div class="row"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))}<div class="sub">${shortDate(c.resultDate)} · ${sc}${c.moved ? ' · moved up' : ''}</div></div></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
+      <button class="btn alt" data-x>Close</button>`);
+    d.querySelector('[data-x]').onclick = () => d.close();
+  }
+
   // ---------- Backup ----------
   function backupScreen() {
     return {
@@ -623,7 +753,7 @@
             let data; try { data = JSON.parse(rd.result); } catch (err) { toast('That file is not a backup'); return; }
             if (!data || data.app !== 'bowls' || !data.state || !data.state.club) { toast('That file is not a Bowls backup'); return; }
             confirmBox(`Replace this app's club set-up, members and competitions with the backup of “${data.state.club.name}” (${fmtDate(data.saved)})? Nothing else on the phone is affected.`, 'Replace', () => {
-              state = Object.assign(blank(), data.state); save(); toast('Backup restored'); go('#home');
+              state = Object.assign(blank(), data.state); if (!state.ladder) state.ladder = E.newLadder(); save(); toast('Backup restored'); go('#home');
             });
           };
           rd.readAsText(f);

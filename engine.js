@@ -311,6 +311,70 @@
     return cards.sort((a, b) => a.team.length - b.team.length || (a.team < b.team ? -1 : 1));
   }
 
+  // ---------- Club ladder ----------
+  // ladder = { players: [id...] (top first), free: {id: n}, open: bool, challenges: [...] }
+  // challenge = { id, challenger, defender, date (YYYY-MM-DD), status: 'open'|'played'|'walkover'|'cancelled',
+  //               shotsC, shotsD, resultDate, moved }
+  const LADDER_REACH = 3, LADDER_DAYS = 14, FREE_CHALLENGES = 2;
+  function newLadder() { return { players: [], free: {}, open: false, challenges: [] }; }
+  function addDays(d, n) { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+  function dueDate(ch) { return addDays(ch.date, LADDER_DAYS); }
+  function isOverdue(ch, today) { return ch.status === 'open' && today > dueDate(ch); }
+  function openChallengeOf(L, id) { return L.challenges.find(c => c.status === 'open' && (c.challenger === id || c.defender === id)); }
+  // Add players to the bottom. newEntrant = true gives them the free challenges.
+  function ladderAdd(L, ids, newEntrant) {
+    ids.forEach(id => { if (!L.players.includes(id)) { L.players.push(id); L.free[id] = newEntrant ? FREE_CHALLENGES : 0; } });
+    return L;
+  }
+  function ladderRemove(L, id) {
+    L.players = L.players.filter(x => x !== id); delete L.free[id];
+    L.challenges.forEach(c => { if (c.status === 'open' && (c.challenger === id || c.defender === id)) c.status = 'cancelled'; });
+    return L;
+  }
+  function canChallenge(L, challenger, defender) {
+    const ic = L.players.indexOf(challenger), id = L.players.indexOf(defender);
+    if (ic < 0 || id < 0) return { ok: false, reason: 'Both players must be on the ladder.' };
+    if (ic <= id) return { ok: false, reason: 'You can only challenge someone above you.' };
+    if (openChallengeOf(L, challenger)) return { ok: false, reason: 'The challenger already has a challenge to play.' };
+    if (openChallengeOf(L, defender)) return { ok: false, reason: 'That player already has a challenge to play.' };
+    const within = ic - id <= LADDER_REACH, free = (L.free[challenger] || 0) > 0;
+    if (L.open || within) return { ok: true, usesFree: false };
+    if (free) return { ok: true, usesFree: true };
+    return { ok: false, reason: `Only up to ${LADDER_REACH} places above (unless the ladder is open or a free challenge is left).` };
+  }
+  function eligibleDefenders(L, challenger) { return L.players.filter(d => canChallenge(L, challenger, d).ok); }
+  function issueChallenge(L, challenger, defender, date, idGen) {
+    const chk = canChallenge(L, challenger, defender); if (!chk.ok) throw new Error(chk.reason);
+    // a new entrant's first two challenges are free ones, whoever they challenge
+    const usedFree = (L.free[challenger] || 0) > 0; if (usedFree) L.free[challenger]--;
+    const ch = { id: idGen ? idGen() : 'c' + (L.challenges.length + 1), challenger, defender, date, status: 'open', usedFree };
+    L.challenges.push(ch); return ch;
+  }
+  // Winner of a challenge: if the challenger wins (and is still below), they take the defender's place
+  // and everyone from there down to the challenger's old place moves down one.
+  function moveUp(L, winner, loser) {
+    const iw = L.players.indexOf(winner), il = L.players.indexOf(loser);
+    if (iw < 0 || il < 0 || iw <= il) return false;
+    L.players.splice(iw, 1); L.players.splice(il, 0, winner); return true;
+  }
+  function recordResult(L, chId, shotsC, shotsD, date) {
+    const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') throw new Error('Not an open challenge');
+    if (!(Number.isInteger(shotsC) && Number.isInteger(shotsD) && shotsC >= 0 && shotsD >= 0) || shotsC === shotsD) throw new Error('Enter both scores; one player must win');
+    ch.status = 'played'; ch.shotsC = shotsC; ch.shotsD = shotsD; ch.resultDate = date;
+    ch.winner = shotsC > shotsD ? ch.challenger : ch.defender;
+    ch.moved = ch.winner === ch.challenger ? moveUp(L, ch.challenger, ch.defender) : false;
+    return ch;
+  }
+  function recordWalkover(L, chId, date) {
+    const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') throw new Error('Not an open challenge');
+    ch.status = 'walkover'; ch.resultDate = date; ch.winner = ch.challenger; ch.moved = moveUp(L, ch.challenger, ch.defender);
+    return ch;
+  }
+  function cancelChallenge(L, chId, refundFree) {
+    const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') return null;
+    ch.status = 'cancelled'; if (refundFree && ch.usedFree) L.free[ch.challenger] = (L.free[ch.challenger] || 0) + 1; return ch;
+  }
+
   // ---------- Remembered settings per format ----------
   const STARTING = { mode: 'tabsin', rounds: 2, ends: 10, bonusOn: true, bonus: 2, booby: true, draw: 'random' };
   function newCompetitionSettings(memory) {
@@ -328,6 +392,8 @@
 
   const api = { FORMATS, GROUPS, POS_X, posCost, makeRng, shuffle, teamLetter, sortRinks, greenOf,
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
-    scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings };
+    scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings,
+    LADDER_REACH, LADDER_DAYS, FREE_CHALLENGES, newLadder, addDays, dueDate, isOverdue, openChallengeOf, ladderAdd, ladderRemove,
+    canChallenge, eligibleDefenders, issueChallenge, moveUp, recordResult, recordWalkover, cancelChallenge };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);

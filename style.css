@@ -117,3 +117,16 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .sheet-t.one col.c-sc{width:35%}
 .printres td.c,.printres th.c{text-align:center;white-space:nowrap}
 .nextletter{font-weight:800;font-size:19px;color:var(--green);margin-bottom:8px}
+.lrow .lpos{font-size:22px;font-weight:800;color:var(--green);min-width:36px;text-align:center}
+.ledit{display:flex;gap:6px}
+.ledit button{width:40px;height:40px;border-radius:9px;border:2px solid var(--green);background:#fff;color:var(--green);font-size:16px;font-weight:800;cursor:pointer}
+.ledit button:disabled{opacity:.3}
+.ledit button.lx{border-color:var(--err);color:var(--err)}
+.sub.overdue{color:var(--err);font-weight:800}
+.pick{max-height:45vh;overflow:auto;margin-bottom:6px}
+.pick .check{font-size:14px}
+.lscore{display:flex;gap:10px;margin-bottom:10px}
+.lscore label{flex:1;display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:15px}
+.lscore input.sc{width:100%;font-size:28px;font-weight:800;text-align:center;padding:10px 4px;border:2.5px solid #26332d;border-radius:10px}
+input[type=date]{width:100%;font:inherit;padding:10px 12px;border:2px solid #5d6e66;border-radius:10px;background:#fff;color:#000}
+dialog{max-height:90vh;overflow:auto}

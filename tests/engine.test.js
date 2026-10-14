@@ -254,6 +254,48 @@ suite('Remembered settings', 'New competition opens on the last format with its 
   const t = E.switchFormat(mem, 'trips'); check(t.ends === 12 && t.rounds === 2 && t.name === 'Sunday Mixed Trips', 'trips kept');
 });
 
+// 8. Club ladder
+suite('Club ladder', 'Challenges only upwards, up to 3 places (any distance when the ladder is open or a free challenge is left); one open challenge per player; a challenger who wins (or gets a walkover) takes the defender\'s place and those in between move down one; a defender who wins changes nothing; new entrants start at the bottom with 2 free challenges; due 14 days after the challenge.', check => {
+  for (let k = 0; k < 3000; k++) {
+    const L = E.newLadder(), n = R(4, 30);
+    E.ladderAdd(L, Array.from({ length: n }, (_, i) => 'p' + i), false);
+    if (rng() < 0.5) E.ladderAdd(L, ['new1', 'new2'], true);
+    L.open = rng() < 0.2;
+    check(L.players[L.players.length - 1] === (L.players.includes('new2') ? 'new2' : 'p' + (n - 1)), 'new entrants at bottom');
+    for (let step = 0; step < 40; step++) {
+      const c = L.players[R(0, L.players.length - 1)], d = L.players[R(0, L.players.length - 1)];
+      const ic = L.players.indexOf(c), id = L.players.indexOf(d), freeBefore = L.free[c] || 0;
+      const busy = !!(E.openChallengeOf(L, c) || E.openChallengeOf(L, d));
+      const expect = ic > id && !busy && (L.open || ic - id <= 3 || freeBefore > 0);
+      const res = E.canChallenge(L, c, d);
+      check(res.ok === expect, `canChallenge ${c}->${d} ic=${ic} id=${id} open=${L.open} free=${freeBefore} busy=${busy}`);
+      if (!res.ok) continue;
+      const ch = E.issueChallenge(L, c, d, '2026-10-01', () => 'x' + k + '_' + step);
+      check((L.free[c] || 0) === Math.max(0, freeBefore - 1), 'free challenge used');
+      check(E.dueDate(ch) === '2026-10-15' && E.isOverdue(ch, '2026-10-16') && !E.isOverdue(ch, '2026-10-15'), 'due in 14 days');
+      const before = L.players.slice(), r = rng();
+      if (r < 0.15) { E.cancelChallenge(L, ch.id); check(JSON.stringify(before) === JSON.stringify(L.players), 'cancel changes nothing'); continue; }
+      let challengerWon;
+      if (r < 0.3) { E.recordWalkover(L, ch.id, '2026-10-20'); challengerWon = true; }
+      else { const cw = rng() < 0.5, a = cw ? 21 : R(0, 20), b = cw ? R(0, 20) : 21; E.recordResult(L, ch.id, a, b, '2026-10-10'); challengerWon = cw; check(ch.winner === (cw ? c : d), 'winner recorded'); }
+      check(new Set(L.players).size === before.length && L.players.length === before.length, 'ladder still holds everyone once');
+      if (!challengerWon) check(JSON.stringify(before) === JSON.stringify(L.players), 'defender win changes nothing');
+      else {
+        const exp = before.slice(); exp.splice(ic, 1); exp.splice(id, 0, c);
+        check(JSON.stringify(exp) === JSON.stringify(L.players), 'challenger takes the place, others move down one');
+        check(L.players.indexOf(d) === id + 1, 'defender drops one place');
+      }
+      check(!E.openChallengeOf(L, c) && !E.openChallengeOf(L, d), 'challenge closed');
+    }
+  }
+  const L = E.newLadder(); E.ladderAdd(L, ['a', 'b', 'c', 'd', 'e', 'f'], false); E.ladderAdd(L, ['n'], true);
+  check(E.canChallenge(L, 'n', 'a').ok && E.canChallenge(L, 'n', 'a').usesFree, 'new entrant can challenge the top with a free challenge');
+  check(!E.canChallenge(L, 'f', 'a').ok && E.canChallenge(L, 'f', 'c').ok, 'normal player limited to 3 places');
+  L.open = true; check(E.canChallenge(L, 'f', 'a').ok, 'open ladder: anyone above');
+  let threw = false; try { E.recordResult(L, 'nope', 21, 3, 'x'); } catch (e) { threw = true; } check(threw, 'unknown challenge refused');
+  E.ladderRemove(L, 'c'); check(!L.players.includes('c'), 'player removed');
+});
+
 // ---------- Worked example for the report ----------
 const ex = (() => {
   const r = E.makeRng(7);
