@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.5 (Ladder)';
+  const VERSION = '0.5.1 (Ladder)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -61,6 +61,7 @@
     else if (parts[0] === 'new') r = newScreen();
     else if (parts[0] === 'backup') r = backupScreen();
     else if (parts[0] === 'ladder') r = ladderScreen();
+    else if (parts[0] === 'about') r = aboutScreen();
     else if (parts[0] === 'comp' && comp(parts[1])) r = compScreen(comp(parts[1]), parts[2] || 'entries');
     else r = homeScreen();
     screen = r;
@@ -101,7 +102,7 @@
           <div class="row tap" data-act="go" data-to="#setup"><div class="main">Greens &amp; rinks<div class="sub">Change greens or number of rinks</div></div><span class="chev">›</span></div>
           <div class="row tap" data-act="go" data-to="#backup"><div class="main">Backup / restore</div><span class="chev">›</span></div>
         </div>
-        <div class="version">Version ${VERSION}</div>`,
+        <div class="version">Version ${VERSION} · <a href="#about" class="about-link">About this app</a></div>`,
     };
   }
 
@@ -731,6 +732,31 @@
         return `<div class="row"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))}<div class="sub">${shortDate(c.resultDate)} · ${sc}${c.moved ? ' · moved up' : ''}</div></div></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
       <button class="btn alt" data-x>Close</button>`);
     d.querySelector('[data-x]').onclick = () => d.close();
+  }
+
+  // ---------- About ----------
+  const CONTACT = 'WobstixApps@proton.me';
+  function aboutScreen() {
+    const subject = encodeURIComponent('Bowls Competition Manager – suggestion');
+    const body = encodeURIComponent(`App version: ${VERSION}\nClub: ${state.club ? state.club.name : ''}\nPhone: ${navigator.userAgent.includes('iPhone') ? 'iPhone' : navigator.userAgent.includes('Android') ? 'Android' : 'other'}\n\nYour suggestion or problem:\n`);
+    return {
+      title: 'About this app', back: '#home',
+      body: `
+        <div class="card" style="text-align:center">
+          <img src="icons/icon-192.png" alt="" width="96" height="96" style="border-radius:22px;margin:6px auto 8px;display:block">
+          <div style="font-size:21px;font-weight:800">Bowls Competition Manager</div>
+          <div class="muted">Version ${VERSION}</div>
+          <div style="margin-top:8px">Made by <b>Wobstix</b></div>
+        </div>
+        <div class="card"><div class="lbl">Suggestions and problems</div>
+          <p class="small" style="margin-top:0">Would you like something changed or added, or has something gone wrong? Send a note — your app version and club name are filled in for you.</p>
+          <a class="btn" href="mailto:${CONTACT}?subject=${subject}&body=${body}" style="text-decoration:none">Suggest a change / report a problem</a>
+          <p class="small muted" style="margin-bottom:0">Or email <b>${CONTACT}</b></p>
+        </div>
+        <div class="card"><div class="lbl">Your information</div>
+          <p class="small" style="margin:0">Everything you enter stays on this phone. The app has no accounts and sends nothing anywhere unless you share a backup, skip cards or results yourself.</p>
+        </div>`,
+    };
   }
 
   // ---------- Backup ----------
