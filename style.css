@@ -116,3 +116,4 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .sheet-t col.c-sc{width:17.5%}
 .sheet-t.one col.c-sc{width:35%}
 .printres td.c,.printres th.c{text-align:center;white-space:nowrap}
+.nextletter{font-weight:800;font-size:19px;color:var(--green);margin-bottom:8px}

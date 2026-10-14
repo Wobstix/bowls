@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.4.3 (Stage 4)';
+  const VERSION = '0.4.4 (Stage 4)';
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
   const GROUP_ORDER = ['S', 'STS', 'TS', 'SL', 'L'];
@@ -269,10 +269,10 @@
     const s = c.settings, size = E.FORMATS[s.format].size;
     if (s.mode === 'tabsin') {
       const n = entrants(c).length, k = E.tabsInCount(n, s.format);
-      return `<div class="count"><b>${n}</b> players → <b>${k.teams}</b> teams on <b>${k.rinks}</b> rinks${k.leftover ? ` · <b>${k.leftover}</b> left over (add ${k.needForNextRink} for another rink)` : ''}</div>`;
+      return `<div class="count"><b>${n}</b> player${n === 1 ? '' : 's'} → <b>${k.teams}</b> teams on <b>${k.rinks}</b> rink${k.rinks === 1 ? '' : 's'}${k.leftover ? ` · <b>${k.leftover}</b> left over (add ${k.needForNextRink} for another rink)` : ''}</div>`;
     }
     const t = c.fixedTeams.length;
-    return `<div class="count"><b>${t}</b> teams → <b>${Math.floor(t / 2)}</b> rinks${t % 2 ? ' · <b>odd number</b> — one more team needed' : ''}</div>`;
+    return `<div class="count"><b>${t}</b> team${t === 1 ? '' : 's'} → <b>${Math.floor(t / 2)}</b> rink${Math.floor(t / 2) === 1 ? '' : 's'}${t % 2 ? ' · <b>odd number</b> — one more team needed' : ''}</div>`;
   }
 
   function tabsInEntries(c) {
@@ -329,7 +329,10 @@
       body: `
         ${c.draw ? `<div class="msg warn">The draw has been made. Changing teams will clear it.</div>` : ''}
         <div class="card"><div class="lbl">Add a team</div>
-          <div style="display:flex;gap:8px"><input type="text" id="tname" list="mnames" placeholder="Entrant or team name, e.g. Queens A" autocomplete="off"><button class="btn" style="width:auto;margin:0;padding:0 18px" data-act="addt">Add</button></div>
+          <div class="nextletter">Next: Team ${E.teamLetter(c.fixedTeams.length)}</div>
+          <input type="text" id="tname" list="mnames" placeholder="Names (skip first) or team name" autocomplete="off">
+          <button class="btn" data-act="addt">Add Team ${E.teamLetter(c.fixedTeams.length)}</button>
+          <p class="small muted" style="margin:8px 0 0">The letter is given automatically. Type only the names, e.g. Mike Naidoo, John Pillay, Mary van Wyk, or a team name such as Queens A.</p>
           <datalist id="mnames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
         </div>
         <div class="card"><div class="lbl">Teams</div>
