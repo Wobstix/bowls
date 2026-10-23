@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.6.2 (Draw cards)';
+  const VERSION = '0.6.3 (Draw cards)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -362,21 +362,20 @@
     const n = c.teamCount || 0, max = clubRinks().length * 2, list = c.cardTeams;
     const names = state.members.filter(m => !m.left).map(m => m.name).sort();
     const setN = v => guardDrawn(c, () => { c.teamCount = Math.max(0, Math.min(max, v)); save(); render(); });
-    // Before the draw the number of teams follows the list. After the draw the list is only used for linking.
-    const follow = () => { if (!c.draw && list.length) c.teamCount = Math.min(max, list.length); };
+    // The number of teams and the team list are separate. The list is only used to link teams to cards.
     const linked = new Set(c.draw ? c.draw.teams.filter(t => Number.isInteger(t.link)).map(t => t.link) : []);
-    const mismatch = c.draw && list.length && list.length !== c.draw.teams.length;
+    const cardsN = c.draw ? c.draw.teams.length : n, mismatch = list.length && cardsN && list.length !== cardsN;
     return {
       keepScroll: true,
       body: `
         ${c.draw ? `<div class="msg warn">The draw has been made. Changing the number of teams will clear it. The team list can still be changed.</div>` : ''}
-        ${mismatch ? `<div class="msg error">The list has ${list.length} teams but ${c.draw.teams.length} cards were drawn.</div>` : ''}
+        ${mismatch ? `<div class="msg warn">The team list has ${list.length} team${list.length > 1 ? 's' : ''}; ${c.draw ? `${cardsN} cards were drawn` : `the number of teams is ${cardsN}`}.</div>` : ''}
         <div class="card"><div class="lbl">Number of teams</div>
-          <div class="row"><div class="main">Teams<div class="sub">${list.length && !c.draw ? 'Counted from the team list' : 'Two teams to a rink'}</div></div><div class="stepper"><button data-act="tn" data-d="-2" aria-label="Fewer">−</button><input type="text" id="tcount" inputmode="numeric" maxlength="2" value="${n || ''}" style="width:70px;text-align:center;font-size:21px;font-weight:700;padding:8px 4px"><button data-act="tn" data-d="2" aria-label="More">+</button></div></div>
+          <div class="row"><div class="main">Teams<div class="sub">Two teams to a rink</div></div><div class="stepper"><button data-act="tn" data-d="-2" aria-label="Fewer">−</button><input type="text" id="tcount" inputmode="numeric" maxlength="2" value="${n || ''}" style="width:70px;text-align:center;font-size:21px;font-weight:700;padding:8px 4px"><button data-act="tn" data-d="2" aria-label="More">+</button></div></div>
           <p class="small muted" style="margin:8px 0 0">The cards come out with a team letter, the starting rink and where winners and losers go, but no names. Lay them face down; each team picks one.</p>
         </div>
         <div class="card"><div class="lbl">Team list (optional)</div>
-          <p class="small muted" style="margin:0 0 8px">If you know the teams beforehand, add them here. When the cards come back you just tap the team on each card instead of typing names. Without a list, type the names off the cards.</p>
+          <p class="small muted" style="margin:0 0 8px">If you know the teams beforehand, add them here. After the draw, link each team to its card on the Draw tab or the Scores tab. Without a list, type the names off the cards.</p>
           <input type="text" id="ctname" list="mnames" placeholder="Names, skip first" autocomplete="off">
           <button class="btn" data-act="addct">Add team</button>
           <datalist id="mnames">${names.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
@@ -392,15 +391,14 @@
         tn(el) { setN(n + +el.dataset.d); },
         addct() {
           const v = $('#ctname').value.trim(); if (!v) return;
-          if (list.length >= max) { toast(`The greens take ${max} teams at most`); return; }
-          list.push({ name: v }); follow(); save(); render(); setTimeout(() => $('#ctname') && $('#ctname').focus(), 0);
+          list.push({ name: v }); save(); render(); setTimeout(() => $('#ctname') && $('#ctname').focus(), 0);
         },
         delct(el) {
           const i = +el.dataset.i, card = c.draw && c.draw.teams.find(x => x.link === i);
           const doIt = () => {
             list.splice(i, 1);
             if (c.draw) c.draw.teams.forEach(x => { if (x.link === i) { x.name = ''; delete x.link; } else if (Number.isInteger(x.link) && x.link > i) x.link--; });
-            follow(); save(); render();
+            save(); render();
           };
           if (card) confirmBox(`This team is linked to card ${card.id}. Remove it and unlink the card?`, 'Remove', doIt); else doIt();
         },
@@ -466,6 +464,24 @@
     c.scores = {}; c.status = 'drawn'; save();
   }
 
+  // Draw cards: link a card letter to a team on the list, or type its names
+  function linkDialog(c, t, done) {
+    const dt = c.draw.teams.find(x => x.id === t), pool = c.cardTeams || [];
+    const used = new Set(c.draw.teams.filter(x => Number.isInteger(x.link)).map(x => x.link));
+    const free = pool.map((p, i) => ({ i, name: p.name })).filter(p => !used.has(p.i));
+    const typed = !pool.length || (!Number.isInteger(dt.link) && dt.name);
+    const d = dialog(`<h3 style="margin:0 0 12px">Card ${t}</h3>
+      ${Number.isInteger(dt.link) ? `<p style="margin:0 0 10px"><b>${esc(dt.name)}</b></p><div class="btns"><button class="btn alt" data-x>Close</button><button class="btn danger" data-unlink style="margin-top:8px">Unlink</button></div>`
+      : `${pool.length ? `<div class="lbl">Which team?</div>${free.length ? `<div class="groups pick">${free.map(p => `<button data-i="${p.i}">${esc(p.name)}</button>`).join('')}</div>` : '<p class="muted">Every team on the list is linked.</p>'}` : ''}
+        <div class="field" style="margin-top:12px"><label>${pool.length ? 'Or type the names (skip first)' : 'Names (skip first)'}</label><input type="text" id="tn" value="${typed ? esc(dt.name) : ''}" autocomplete="off"></div>
+        <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Save names</button></div>`}`);
+    const fin = () => { save(); d.close(); done(); };
+    d.querySelectorAll('[data-x]').forEach(b => b.onclick = () => d.close());
+    const un = d.querySelector('[data-unlink]'); if (un) un.onclick = () => { dt.name = ''; delete dt.link; fin(); };
+    d.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { const i = +b.dataset.i; dt.link = i; dt.name = pool[i].name; fin(); });
+    const sv = d.querySelector('[data-s]'); if (sv) sv.onclick = () => { dt.name = d.querySelector('#tn').value.trim(); delete dt.link; fin(); };
+  }
+
   function drawTab(c) {
     const s = c.settings, d = c.draw;
     if (!d) return { body: `<div class="empty">No draw yet. Tick the entries and rinks, then tap Make the draw.</div>`, bottom: `<button class="btn" data-act="go" data-to="#comp/${c.id}/rinks">Go to rinks</button>` };
@@ -483,13 +499,14 @@
         </div>
         <div class="card"><div class="lbl">Teams${s.mode === 'tabsin' ? ' · skip listed first' : ''}</div>
           ${d.teams.map(t => `<div class="row tap" data-act="editteam" data-id="${t.id}"><span class="chip">${t.id}</span><div class="main">${t.name ? esc(t.name) : '<span class="muted">No names yet</span>'}</div><span class="small muted">${startOf(d, t.id)}</span><span class="chev">›</span></div>`).join('')}
-          <p class="small muted">${s.mode === 'cards' ? 'Names are written on the cards by the teams. Type them in on the Scores tab when the cards come back.' : 'Tap a team to change a name (e.g. a late replacement).'}</p>
+          <p class="small muted">${s.mode === 'cards' ? 'Tap a card to link it to a team from the list, or to type its names. This can also be done on the Scores tab.' : 'Tap a team to change a name (e.g. a late replacement).'}</p>
         </div>
         `,
       bottom: `<div class="btns"><button class="btn alt" data-act="redraw">New draw</button><button class="btn" data-act="go" data-to="#comp/${c.id}/cards">Skip cards</button></div>`,
       actions: {
         redraw() { confirmBox(`Make a new draw? The current one${hasScores(c) ? ' and all scores entered' : ''} will be replaced.`, 'New draw', () => { makeDraw(c); render(); toast('New draw made'); }); },
         editteam(el) {
+          if (s.mode === 'cards') { linkDialog(c, el.dataset.id, render); return; }
           const t = d.teams.find(x => x.id === el.dataset.id);
           const dd = dialog(`<h3 style="margin:0 0 12px">Team ${t.id}</h3><div class="field"><label>Names (skip first)</label><input type="text" id="tn" value="${esc(t.name)}"></div>
             <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Save</button></div>`);
