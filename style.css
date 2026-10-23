@@ -134,3 +134,7 @@ dialog{max-height:90vh;overflow:auto}
 a.btn{display:block}
 .sheet-t tr.namesrow label{display:flex;flex-direction:column;gap:5px}
 .sheet-t tr.namesrow input.nm{width:100%;font:inherit;font-size:18px;font-weight:600;padding:9px 10px;border:2px solid #fff;border-radius:8px;background:#fff;color:#000}
+.sheet-t tr.namesrow .nmhead,.sheet-t tr.namesrow .nmline{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sheet-t tr.namesrow .nmbtn{flex:none;background:#fff;color:var(--green);border:0;border-radius:8px;font:inherit;font-size:15px;font-weight:700;padding:7px 10px;cursor:pointer}
+.sheet-t tr.namesrow .nmpick{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.sheet-t tr.namesrow .nmpick button{text-align:left;background:#fff;color:#000;border:0;border-radius:8px;font:inherit;font-size:17px;font-weight:600;padding:11px 12px;cursor:pointer}

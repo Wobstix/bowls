@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.6.1 (Draw cards)';
+  const VERSION = '0.6.2 (Draw cards)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -358,21 +358,52 @@
   }
 
   function cardsEntries(c) {
-    const n = c.teamCount || 0, max = clubRinks().length * 2;
+    c.cardTeams = c.cardTeams || [];
+    const n = c.teamCount || 0, max = clubRinks().length * 2, list = c.cardTeams;
+    const names = state.members.filter(m => !m.left).map(m => m.name).sort();
     const setN = v => guardDrawn(c, () => { c.teamCount = Math.max(0, Math.min(max, v)); save(); render(); });
+    // Before the draw the number of teams follows the list. After the draw the list is only used for linking.
+    const follow = () => { if (!c.draw && list.length) c.teamCount = Math.min(max, list.length); };
+    const linked = new Set(c.draw ? c.draw.teams.filter(t => Number.isInteger(t.link)).map(t => t.link) : []);
+    const mismatch = c.draw && list.length && list.length !== c.draw.teams.length;
     return {
       keepScroll: true,
       body: `
-        ${c.draw ? `<div class="msg warn">The draw has been made. Changing the number of teams will clear it.</div>` : ''}
+        ${c.draw ? `<div class="msg warn">The draw has been made. Changing the number of teams will clear it. The team list can still be changed.</div>` : ''}
+        ${mismatch ? `<div class="msg error">The list has ${list.length} teams but ${c.draw.teams.length} cards were drawn.</div>` : ''}
         <div class="card"><div class="lbl">Number of teams</div>
-          <div class="row"><div class="main">Teams<div class="sub">Two teams to a rink</div></div><div class="stepper"><button data-act="tn" data-d="-2" aria-label="Fewer">−</button><input type="text" id="tcount" inputmode="numeric" maxlength="2" value="${n || ''}" style="width:70px;text-align:center;font-size:21px;font-weight:700;padding:8px 4px"><button data-act="tn" data-d="2" aria-label="More">+</button></div></div>
-          <p class="small muted" style="margin:8px 0 0">The cards come out with a team letter, the starting rink and where winners and losers go, but no names. Lay them face down; each team picks one and writes its names on it. When the cards come back, type the names in on the Scores tab.</p>
+          <div class="row"><div class="main">Teams<div class="sub">${list.length && !c.draw ? 'Counted from the team list' : 'Two teams to a rink'}</div></div><div class="stepper"><button data-act="tn" data-d="-2" aria-label="Fewer">−</button><input type="text" id="tcount" inputmode="numeric" maxlength="2" value="${n || ''}" style="width:70px;text-align:center;font-size:21px;font-weight:700;padding:8px 4px"><button data-act="tn" data-d="2" aria-label="More">+</button></div></div>
+          <p class="small muted" style="margin:8px 0 0">The cards come out with a team letter, the starting rink and where winners and losers go, but no names. Lay them face down; each team picks one.</p>
+        </div>
+        <div class="card"><div class="lbl">Team list (optional)</div>
+          <p class="small muted" style="margin:0 0 8px">If you know the teams beforehand, add them here. When the cards come back you just tap the team on each card instead of typing names. Without a list, type the names off the cards.</p>
+          <input type="text" id="ctname" list="mnames" placeholder="Names, skip first" autocomplete="off">
+          <button class="btn" data-act="addct">Add team</button>
+          <datalist id="mnames">${names.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+          ${list.length ? `<div style="margin-top:10px">${list.map((t, i) => `<div class="row"><span class="chip ${linked.has(i) ? '' : 'grey'}">${i + 1}</span><div class="main">${esc(t.name)}${linked.has(i) ? `<div class="sub">Card ${c.draw.teams.find(x => x.link === i).id}</div>` : ''}</div><button style="background:none;border:0;color:var(--err);font-size:20px;cursor:pointer" data-act="delct" data-i="${i}" aria-label="Remove">✕</button></div>`).join('')}</div>` : ''}
         </div>
         <button class="btn danger" data-act="delcomp" style="margin-top:28px">Delete this competition</button>`,
       bottom: countBar(c) + `<button class="btn" data-act="go" data-to="#comp/${c.id}/rinks" style="margin-top:0">Next: rinks</button>`,
-      after() { const t = $('#tcount'); t.onchange = () => { const v = parseInt(t.value.replace(/\D/g, ''), 10) || 0; if (v !== n) setN(v); }; t.onkeydown = e => { if (e.key === 'Enter') t.blur(); }; },
+      after() {
+        const t = $('#tcount'); t.onchange = () => { const v = parseInt(t.value.replace(/\D/g, ''), 10) || 0; if (v !== n) setN(v); }; t.onkeydown = e => { if (e.key === 'Enter') t.blur(); };
+        const ct = $('#ctname'); ct.onkeydown = e => { if (e.key === 'Enter') screen.actions.addct(); };
+      },
       actions: {
         tn(el) { setN(n + +el.dataset.d); },
+        addct() {
+          const v = $('#ctname').value.trim(); if (!v) return;
+          if (list.length >= max) { toast(`The greens take ${max} teams at most`); return; }
+          list.push({ name: v }); follow(); save(); render(); setTimeout(() => $('#ctname') && $('#ctname').focus(), 0);
+        },
+        delct(el) {
+          const i = +el.dataset.i, card = c.draw && c.draw.teams.find(x => x.link === i);
+          const doIt = () => {
+            list.splice(i, 1);
+            if (c.draw) c.draw.teams.forEach(x => { if (x.link === i) { x.name = ''; delete x.link; } else if (Number.isInteger(x.link) && x.link > i) x.link--; });
+            follow(); save(); render();
+          };
+          if (card) confirmBox(`This team is linked to card ${card.id}. Remove it and unlink the card?`, 'Remove', doIt); else doIt();
+        },
         delcomp() { confirmBox(`Delete “${c.settings.name}”? This cannot be undone.`, 'Delete', () => { state.competitions = state.competitions.filter(x => x.id !== c.id); save(); go('#home'); }); },
       },
     };
@@ -551,6 +582,28 @@
         const all = [...document.querySelectorAll('input.sc')];
         // names of the team you are working on, shown in a line under its row
         const cols = 2 + 2 * games;
+        const cardsMode = c.settings.mode === 'cards', pool = c.cardTeams || [];
+        const firstScore = t => document.querySelector(`input.sc[data-t="${t}"][data-g="0"][data-k="f"]`);
+        // Draw cards: the line under the row links the card to a team from the list, or takes typed names
+        const fillNames = (tr, t) => {
+          const dt = c.draw.teams.find(x => x.id === t), td = tr.querySelector('td');
+          const used = new Set(c.draw.teams.filter(x => Number.isInteger(x.link)).map(x => x.link));
+          const free = pool.map((p, i) => ({ i, name: p.name })).filter(p => !used.has(p.i));
+          if (Number.isInteger(dt.link)) {
+            td.innerHTML = `<div class="nmline"><span>Card ${t}: ${esc(dt.name)}</span><button class="nmbtn" data-unlink>Unlink</button></div>`;
+            td.querySelector('[data-unlink]').onclick = () => { dt.name = ''; delete dt.link; save(); fillNames(tr, t); refresh(); };
+          } else if (pool.length && !tr.dataset.typing) {
+            td.innerHTML = `<div class="nmhead">Card ${t}: which team? <button class="nmbtn" data-type>Type names</button></div>
+              ${free.length ? `<div class="nmpick">${free.map(p => `<button data-i="${p.i}">${esc(p.name)}</button>`).join('')}</div>` : '<div>Every team on the list is linked.</div>'}`;
+            td.querySelectorAll('.nmpick [data-i]').forEach(bt => bt.onclick = () => { const i = +bt.dataset.i; dt.link = i; dt.name = pool[i].name; save(); fillNames(tr, t); refresh(); const f = firstScore(t); if (f) f.focus(); });
+            td.querySelector('[data-type]').onclick = () => { tr.dataset.typing = '1'; fillNames(tr, t); const ni = td.querySelector('input.nm'); if (ni) ni.focus(); };
+          } else {
+            td.innerHTML = `<label>Card ${t} names (skip first)<input type="text" class="nm" autocomplete="off" enterkeyhint="next" value="${esc(dt.name)}" placeholder="Type the names off the card"></label>`;
+            const ni = td.querySelector('input.nm');
+            ni.addEventListener('input', () => { dt.name = ni.value.trim(); save(); refresh(); });
+            ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = firstScore(t); if (f) f.focus(); } });
+          }
+        };
         const showNames = t => {
           const cur = document.querySelector('tr.namesrow');
           if (cur && cur.dataset.t === t) return;
@@ -559,16 +612,21 @@
           const row = document.querySelector(`tr.srow[data-t="${t}"]`); if (!row) return;
           const team = teams.find(x => x.id === t);
           row.classList.add('cur');
-          if (c.settings.mode === 'cards') {
-            row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}"><label>Team ${t} names (skip first)<input type="text" class="nm" autocomplete="off" enterkeyhint="next" value="${esc(team.name)}" placeholder="Type the names off the card"></label></td></tr>`);
-            const ni = document.querySelector('tr.namesrow input.nm'), dt = c.draw.teams.find(x => x.id === t);
-            ni.addEventListener('input', () => { dt.name = team.name = ni.value.trim(); save(); refresh(); });
-            ni.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector(`input.sc[data-t="${t}"][data-g="0"][data-k="f"]`); if (f) f.focus(); } });
+          if (cardsMode) {
+            row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}"></td></tr>`);
+            fillNames(row.nextElementSibling, t);
           } else row.insertAdjacentHTML('afterend', `<tr class="namesrow" data-t="${t}"><td colspan="${cols}">Team ${t}: ${esc(team.name)}</td></tr>`);
         };
-        const cardsMode = c.settings.mode === 'cards';
-        // Draw cards: each card is entered top to bottom, names first, then the scores
-        const focusNames = t => { showNames(t); const ni = document.querySelector('tr.namesrow input.nm'); if (ni) { ni.focus(); ni.scrollIntoView({ block: 'center' }); } };
+        // Draw cards: each card is entered top to bottom, names (or team) first, then the scores
+        const focusNames = t => {
+          showNames(t);
+          const tr = document.querySelector('tr.namesrow'), ni = tr && tr.querySelector('input.nm');
+          if (ni) { ni.focus(); ni.scrollIntoView({ block: 'center' }); return; }
+          const dt = c.draw.teams.find(x => x.id === t);
+          if (Number.isInteger(dt.link)) { const f = firstScore(t); if (f) f.focus(); return; }
+          if (document.activeElement) document.activeElement.blur();
+          if (tr) tr.scrollIntoView({ block: 'center' });
+        };
         screen.actions = Object.assign(screen.actions || {}, { names(el) { if (cardsMode) focusNames(el.dataset.t); else showNames(el.dataset.t); } });
         all.forEach((el, i) => {
           el.addEventListener('input', () => {
