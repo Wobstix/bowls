@@ -245,7 +245,7 @@
       r.points += l.points; r.for += l.for; r.against += l.against; r.score += l.score; r.total += l.total; })));
     rows.sort(rankCmp);
     rows.forEach((r, i) => { r.place = i > 0 && rankCmp(rows[i - 1], r) === 0 ? rows[i - 1].place : i + 1; });
-    const prizes = [];
+    const prizes = []; let clash = null;
     const done = rows.filter(r => r.played);
     if (done[0]) prizes.push({ prize: 'Winners', team: done[0].team, row: done[0] });
     if (done[1]) prizes.push({ prize: 'Runners-up', team: done[1].team, row: done[1] });
@@ -253,9 +253,17 @@
     if (last >= 1) {
       const c = rows.filter(r => r.rounds[last]).sort((a, b) => rankCmp(a.rounds[last], b.rounds[last]));
       if (c[0]) prizes.push({ prize: `Best game ${last + 1}`, team: c[0].team, line: c[0].rounds[last] });
+      // Clubs may not allow two prizes to one team. The app still awards the prize as normal,
+      // but when the best-last-game team already has Winners or Runners-up it names the next best.
+      const top = prizes.filter(x => x.prize === 'Winners' || x.prize === 'Runners-up');
+      const dup = c[0] && top.find(x => x.team === c[0].team);
+      if (dup) {
+        const nx = c.find(r => !top.some(x => x.team === r.team));
+        clash = { team: c[0].team, prize: dup.prize, game: last + 1, next: nx ? { team: nx.team, line: nx.rounds[last] } : null };
+      }
     }
     if (opts.booby && done.length > 2) prizes.push({ prize: 'Booby', team: done[done.length - 1].team, row: done[done.length - 1] });
-    return { rows, prizes };
+    return { rows, prizes, clash };
   }
 
   // ---------- Card-by-card entry ----------

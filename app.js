@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.6.3 (Draw cards)';
+  const VERSION = '0.6.4 (Prizes)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -680,6 +680,12 @@
     const r = p.row || p.line;
     return `${wp ? `${r.points} pts, ` : ''}${signed(r.score)}${p.line ? ' in game 2' : ''}`;
   }
+  // Only one prize per team is a club rule, not the app's: the clash is shown, the organisers decide.
+  function clashText(cl, name, wp) {
+    const nm = id => name(id) ? ` (${name(id)})` : '';
+    const nx = cl.next ? `Next best game ${cl.game}: Team ${cl.next.team}${nm(cl.next.team)}, ${wp ? `${cl.next.line.points} pts, ` : ''}${signed(cl.next.line.score)}.` : `No other team for best game ${cl.game}.`;
+    return { lead: `Team ${cl.team} also won ${cl.prize}.`, next: nx };
+  }
   function resultsTab(c) {
     if (!c.draw) return { body: `<div class="empty">Make the draw first.</div>` };
     const { st, n, warns, wp, name, total } = resultsData(c);
@@ -691,7 +697,7 @@
         ${n < total ? `<div class="msg warn">Results so far — ${total - n} card${total - n > 1 ? 's' : ''} still to enter.</div>` : '<div class="msg ok">All cards entered.</div>'}
         ${warns.length ? `<div class="msg error">${warns.length} pair${warns.length > 1 ? 's' : ''} of cards don’t agree. Check them on the Scores tab.</div>` : ''}
         <div class="card"><div class="lbl">Prizes</div>
-          ${st.prizes.map(p => `<div class="row"><div class="main"><b>${esc(p.prize)}</b><div class="sub">Team ${p.team}${name(p.team) ? ` · ${esc(name(p.team))}` : ''}</div></div><b>${prizeText(p, wp)}</b></div>`).join('') || '<div class="muted">—</div>'}
+          ${st.prizes.map(p => `<div class="row"><div class="main"><b>${esc(p.prize)}</b><div class="sub">Team ${p.team}${name(p.team) ? ` · ${esc(name(p.team))}` : ''}</div></div><b>${prizeText(p, wp)}</b></div>${st.clash && p.line ? (t => `<div class="msg warn" style="margin:8px 0">${esc(t.lead)} ${esc(t.next)}</div>`)(clashText(st.clash, name, wp)) : ''}`).join('') || '<div class="muted">—</div>'}
         </div>
         <div class="card" style="overflow-x:auto"><div class="lbl">Placings</div>
           <table><tr><th>#</th><th>Team</th>${wp ? '<th class="c">Pts</th>' : ''}<th class="c">For</th><th class="c">Agst</th><th class="c">Diff</th></tr>
@@ -702,7 +708,7 @@
       actions: {
         async share() {
           const lines = [`${c.settings.name} — results${n < total ? ' (so far)' : ''}`, ''];
-          st.prizes.forEach(p => lines.push(`${p.prize}: Team ${p.team}${name(p.team) ? ` (${name(p.team)})` : ''} ${prizeText(p, wp)}`));
+          st.prizes.forEach(p => { lines.push(`${p.prize}: Team ${p.team}${name(p.team) ? ` (${name(p.team)})` : ''} ${prizeText(p, wp)}`); if (st.clash && p.line) { const t = clashText(st.clash, name, wp); lines.push(`  Note: ${t.lead} ${t.next}`); } });
           lines.push('', 'Placings:');
           rows.forEach(r => lines.push(`${r.place}. Team ${r.team} – ${wp ? `${r.points} pts, ` : ''}${signed(r.score)} (${r.for}–${r.against})${r.name ? ` – ${r.name}` : ''}`));
           const text = lines.join('\n');
@@ -713,6 +719,7 @@
           let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
           pa.innerHTML = `<div class="printres"><h1>${esc(c.settings.name)} — results</h1><p>${esc(state.club.name)} · ${fmtDate(c.created)}${n < total ? ' · results so far' : ''}</p>
             <h2>Prizes</h2><table>${st.prizes.map(p => `<tr><td><b>${esc(p.prize)}</b></td><td class="c">Team ${p.team}</td><td>${esc(name(p.team))}</td><td>${prizeText(p, wp)}</td></tr>`).join('')}</table>
+            ${st.clash ? (t => `<p style="margin:3mm 0 0"><b>Note:</b> ${esc(t.lead)} ${esc(t.next)}</p>`)(clashText(st.clash, name, wp)) : ''}
             <h2>Placings</h2><table><tr><th class="c">#</th><th class="c">Team</th><th>Players</th>${wp ? '<th class="c">Pts</th>' : ''}<th class="c">For</th><th class="c">Agst</th><th class="c">Diff</th></tr>
             ${rows.map(r => `<tr><td class="c">${r.place}</td><td class="c"><b>${r.team}</b></td><td>${esc(r.name)}</td>${wp ? `<td class="c">${r.points}</td>` : ''}<td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c">${signed(r.score)}</td></tr>`).join('')}</table></div>`;
           setTimeout(() => window.print(), 50);

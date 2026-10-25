@@ -315,6 +315,32 @@ const ex = (() => {
   return { players: pl, teams, outOfPosition, rinks, r1, table: tab.table, crossGreen: tab.crossGreenMoves, res1, r2, res2, st };
 })();
 
+suite('Prize clash note', 'Prizes are awarded as normal; when the best last-game team also won Winners or Runners-up, the next best last-game team without either prize is named', check => {
+  const rng = E.makeRng(4242);
+  let clashes = 0;
+  for (let k = 0; k < 4000; k++) {
+    const n = 6 + 2 * Math.floor(rng() * 10), teams = Array.from({ length: n }, (_, i) => ({ id: E.teamLetter(i), name: '' }));
+    const sc = {}; teams.forEach(t => sc[t.id] = [0, 1].map(() => ({ f: Math.floor(rng() * 25), a: Math.floor(rng() * 25) })));
+    const wp = rng() < 0.5 ? 2 : 0, st = E.standingsFromCards(teams, sc, 2, wp, { booby: true });
+    const best = st.prizes.find(p => p.prize === 'Best game 2'), top = st.prizes.filter(p => p.prize === 'Winners' || p.prize === 'Runners-up').map(p => p.team);
+    check(st.prizes.length === 4, 'four prizes still awarded');
+    const shouldClash = top.includes(best.team);
+    check(!!st.clash === shouldClash, `clash flag wrong (${best.team} vs ${top})`);
+    if (st.clash) {
+      clashes++;
+      check(st.clash.team === best.team && st.clash.prize === st.prizes.find(p => p.team === best.team).prize, 'clash names the wrong team or prize');
+      const g2 = st.rows.filter(r => r.rounds[1]).sort((a, b) => b.rounds[1].points - a.rounds[1].points || b.rounds[1].score - a.rounds[1].score || a.rounds[1].against - b.rounds[1].against);
+      const want = g2.find(r => !top.includes(r.team));
+      check(st.clash.next && st.clash.next.team === want.team, `next best wrong: ${st.clash.next && st.clash.next.team} vs ${want.team}`);
+      check(!top.includes(st.clash.next.team), 'next best already has a prize');
+    }
+  }
+  check(clashes > 100, 'too few clashes exercised: ' + clashes);
+  // one game only: no clash possible
+  const t1 = [{ id: 'A' }, { id: 'B' }, { id: 'C' }, { id: 'D' }], s1 = { A: [{ f: 9, a: 2 }], B: [{ f: 2, a: 9 }], C: [{ f: 5, a: 4 }], D: [{ f: 4, a: 5 }] };
+  check(E.standingsFromCards(t1, s1, 1, 2, {}).clash === null, 'clash on a 1-game competition');
+});
+
 fs.writeFileSync(require('os').tmpdir() + '/bowls_test_results.json', JSON.stringify({ results, failures, oopStats, greenStats, sameGreenCheck, fullComps, example: ex }, null, 1));
 console.log(failures ? `\n${failures} FAILURES` : '\nALL PASS');
 process.exit(failures ? 1 : 0);
