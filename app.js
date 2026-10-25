@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.6.4 (Prizes)';
+  const VERSION = '0.6.5 (Greens)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -125,6 +125,9 @@
           <button class="btn alt" data-act="addg">+ Add green</button>
           <p class="small muted">Name greens with a letter (A, B, C) or a short name. Rinks show as A1, A2…</p>
         </div>
+        ${d.greens.length > 1 ? `<div class="card"><div class="lbl">Second game</div>
+          <div class="seg"><button data-act="sg" data-v="other" class="${d.secondGame !== 'same' ? 'on' : ''}">Move to the other green</button><button data-act="sg" data-v="same" class="${d.secondGame === 'same' ? 'on' : ''}">Stay on the same green</button></div>
+          <p class="small muted" style="margin:8px 0 0">Used when the app works out where winners and losers go for game 2.</p></div>` : ''}
         <div class="msg ok">${total} rinks in total — room for up to ${total * 2} teams.</div>`,
       bottom: `<button class="btn" data-act="save">Save</button>`,
       after() {
@@ -135,12 +138,13 @@
         rk(el) { const g = d.greens[+el.dataset.i]; g.rinks = Math.max(1, Math.min(20, g.rinks + +el.dataset.d)); render(); },
         addg() { const used = d.greens.map(g => g.name); const n = 'ABCDEFGH'.split('').find(c => !used.includes(c)) || 'G' + (d.greens.length + 1); d.greens.push({ name: n, rinks: 6 }); render(); },
         delg(el) { d.greens.splice(+el.dataset.i, 1); render(); },
+        sg(el) { d.secondGame = el.dataset.v; render(); },
         save() {
           if (!d.name.trim()) { toast('Please enter the club name'); return; }
           const names = d.greens.map(g => g.name);
           if (names.some(n => !n || /\d$/.test(n))) { toast('Each green needs a name that does not end in a number'); return; }
           if (new Set(names).size !== names.length) { toast('Two greens have the same name'); return; }
-          state.club = { name: d.name.trim(), greens: d.greens }; save(); setupDraft = null; toast('Saved'); go('#home');
+          state.club = { name: d.name.trim(), greens: d.greens, secondGame: d.secondGame === 'same' ? 'same' : 'other' }; save(); setupDraft = null; toast('Saved'); go('#home');
         },
       },
     };
@@ -407,17 +411,20 @@
     };
   }
 
-  // Picks rinks so that Game 2 can stay on the same green where possible, then uses as few greens as possible.
+  // Club rule for game 2: move every team to another green (default), or keep them on the same green.
+  function moveGreen() { return !state.club || state.club.secondGame !== 'same'; }
+  // Picks rinks for the club's game-2 green rule: fewest teams breaking it, then the most even spread
+  // (moving greens) or the fewest greens (staying).
   function pickRinks(need, rounds) {
-    const greens = state.club.greens; let best = null;
+    const greens = state.club.greens, mg = moveGreen(); let best = null;
     (function rec(i, left, alloc) {
       if (i === greens.length) {
         if (left) return;
         const rinks = greens.flatMap((g, k) => Array.from({ length: alloc[k] }, (_, j) => g.name + (j + 1)));
-        let cross = 0;
-        if (rounds === 2 && need >= 3) { try { cross = E.round2Table(rinks, E.makeRng(1), 30).crossGreenMoves; } catch (e) { cross = 999; } }
+        let cost = 0;
+        if (rounds === 2 && need >= 3) { try { const t = E.round2Table(rinks, E.makeRng(1), mg ? undefined : 30, { moveGreen: mg }); cost = mg ? t.sameGreenMoves : t.crossGreenMoves; } catch (e) { cost = 999; } }
         const used = alloc.filter(x => x).length, spread = Math.max(...alloc) - Math.min(...alloc.filter(x => x));
-        const score = [cross, used, spread];
+        const score = mg ? [cost, spread] : [cost, used, spread];
         const better = !best || (() => { for (let k = 0; k < score.length; k++) if (score[k] !== best.score[k]) return score[k] < best.score[k]; return false; })();
         if (better) best = { score, rinks };
         return;
@@ -459,8 +466,8 @@
     else teams = c.fixedTeams.map((t, i) => ({ id: E.teamLetter(i), name: t.name }));
     const rinks = E.sortRinks(c.rinks, greenOrder());
     const round1 = E.drawRound1(teams, rinks);
-    const t2 = s.rounds === 2 ? E.round2Table(rinks) : null;
-    c.draw = { made: Date.now(), teams, round1, table: t2 ? t2.table : null, crossGreen: t2 ? t2.crossGreenMoves : 0, outOfPosition: oop };
+    const mg = moveGreen(), t2 = s.rounds === 2 ? E.round2Table(rinks, undefined, undefined, { moveGreen: mg }) : null;
+    c.draw = { made: Date.now(), teams, round1, table: t2 ? t2.table : null, crossGreen: t2 ? t2.crossGreenMoves : 0, sameGreen: t2 ? t2.sameGreenMoves : 0, moveGreen: mg, outOfPosition: oop };
     c.scores = {}; c.status = 'drawn'; save();
   }
 
@@ -492,6 +499,7 @@
     return {
       keepScroll: true,
       body: `
+        ${two && d.moveGreen && state.club.greens.length > 1 ? (d.sameGreen ? `<div class="msg warn">${d.sameGreen} team${d.sameGreen > 1 ? 's stay' : ' stays'} on the same green for game 2 — the ticked rinks don’t allow every team to move. An even number of rinks on each green (e.g. 4 + 4) lets everyone move.</div>` : `<div class="msg ok">Every team moves to the other green for game 2.</div>`) : ''}
         ${moved ? `<div class="msg warn">${moved} player${moved > 1 ? 's are' : ' is'} placed outside their usual group because a position was short (filled from the nearest group). Teams sort out positions themselves on the day.</div>` : ''}
         <div class="card"><div class="lbl">Rinks${two ? ' · same details on both teams’ cards' : ''}</div>
           <table><tr><th>Start</th><th>Teams</th>${two ? '<th class="c">Winners to</th><th class="c">Losers to</th>' : ''}</tr>

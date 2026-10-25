@@ -315,6 +315,28 @@ const ex = (() => {
   return { players: pl, teams, outOfPosition, rinks, r1, table: tab.table, crossGreen: tab.crossGreenMoves, res1, r2, res2, st };
 })();
 
+suite('Round 2 table, move to the other green', 'All table rules still hold; teams staying on their green are the fewest possible (none with an even number of rinks on each of two greens)', check => {
+  const all2 = ['A1','A2','A3','A4','A5','A6','B1','B2','B3','B4','B5','B6'];
+  for (let m = 0; m < (1 << 12); m++) {
+    const rinks = all2.filter((_, i) => m >> i & 1); if (rinks.length < 3) continue;
+    for (let seed = 1; seed <= 3; seed++) {
+      const res = E.round2Table(rinks, E.makeRng(m * 7 + seed), undefined, { moveGreen: true });
+      checkTable(rinks, res, check);
+      const a = rinks.filter(r => r[0] === 'A').length, b = rinks.length - a;
+      // minimum: the larger green keeps its surplus; with equal odd counts one W and one L pairing must mix greens
+      const lb = Math.max(2 * a - 2 * b, 2 * b - 2 * a, a === b && a % 2 ? 2 : 0);
+      check(res.sameGreenMoves === lb, `${a}+${b}: ${res.sameGreenMoves} stay, expected ${lb}`);
+      let same = 0; rinks.forEach(r => ['winnersTo', 'losersTo'].forEach(k => { if (res.table[r][k][0] === r[0]) same++; }));
+      check(same === res.sameGreenMoves, 'sameGreenMoves count wrong');
+    }
+  }
+  // three greens: rules hold
+  for (let k = 0; k < 2000; k++) {
+    const n = R(3, CLUB3.length), rinks = E.shuffle(CLUB3, rng).slice(0, n);
+    checkTable(rinks, E.round2Table(rinks, rng, undefined, { moveGreen: true }), check);
+  }
+});
+
 suite('Prize clash note', 'Prizes are awarded as normal; when the best last-game team also won Winners or Runners-up, the next best last-game team without either prize is named', check => {
   const rng = E.makeRng(4242);
   let clashes = 0;

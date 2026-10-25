@@ -158,10 +158,16 @@
   // For every Round 1 rink: where its winner and its loser play Round 2.
   // Rules: never the same rink twice; every rink used once; no rematch; W v W, L v L,
   // one W v L match when the number of rinks is odd. Prefers keeping teams on their green.
-  function round2Table(rinks, rng, tries) {
-    rng = rng || Math.random; tries = tries || 40;
+  // opts.moveGreen: every team should play game 2 on a different green (where the rinks allow);
+  // otherwise teams are kept on the same green where possible.
+  function round2Table(rinks, rng, tries, opts) {
+    opts = opts || {}; const mg = !!opts.moveGreen;
+    rng = rng || Math.random; tries = tries || (mg ? 200 : 40);
     const n = rinks.length; if (n < 3) throw new Error('A second game needs at least 3 rinks');
     let best = null;
+    // fewest teams that must stay on their green: a green with more rinks than all the others together keeps the surplus
+    const cnt = {}; rinks.forEach(r => cnt[greenOf(r)] = (cnt[greenOf(r)] || 0) + 1);
+    const minSame = Math.max(0, ...Object.values(cnt).map(k => 2 * k - 2 * (n - k)));
     for (let t = 0; t < tries; t++) {
       // group-wise shuffle so linked pairs tend to share a green
       const greens = {}; rinks.forEach(r => (greens[greenOf(r)] = greens[greenOf(r)] || []).push(r));
@@ -173,26 +179,28 @@
         for (let i = 1; i < n; i += 2) matches.push([[s[i], 'L'], [s[i + 1], 'L']]);
         matches.push([[s[n - 1], 'W'], [s[0], 'L']]);
       }
-      const dest = assignDest(matches, rinks, rng);
+      const dest = assignDest(matches, rinks, rng, mg);
       if (!dest) continue;
       const table = {}; rinks.forEach(r => table[r] = {});
       let cross = 0, wl = null;
       matches.forEach((m, k) => { m.forEach(([st, res]) => { table[st][res === 'W' ? 'winnersTo' : 'losersTo'] = dest[k]; if (greenOf(st) !== greenOf(dest[k])) cross++; });
         if (m[0][1] !== m[1][1]) wl = dest[k]; });
-      if (!best || cross < best.crossGreenMoves) best = { table, crossGreenMoves: cross, winnerVsLoserRink: wl };
-      if (cross === 0) break;
+      const same = 2 * n - cross, cost = mg ? same : cross;
+      if (!best || cost < best.cost) best = { table, crossGreenMoves: cross, sameGreenMoves: same, winnerVsLoserRink: wl, cost };
+      if (cost <= (mg ? minSame : 0)) break;
     }
     if (!best) throw new Error('No valid Round 2 table found');
-    return best;
+    delete best.cost; return best;
   }
-  function assignDest(matches, rinks, rng) {
+  function assignDest(matches, rinks, rng, moveGreen) {
     const order = shuffle(matches.map((_, i) => i), rng);
     const dest = {}, used = new Set();
     // candidates: prefer a rink on the same green as the teams arriving
     function cands(m) {
       const banned = new Set(matches[m].map(x => x[0])), gs = new Set(matches[m].map(x => greenOf(x[0])));
       const free = shuffle(rinks.filter(r => !used.has(r) && !banned.has(r)), rng);
-      return free.filter(r => gs.has(greenOf(r))).concat(free.filter(r => !gs.has(greenOf(r))));
+      const same = free.filter(r => gs.has(greenOf(r))), other = free.filter(r => !gs.has(greenOf(r)));
+      return moveGreen ? other.concat(same) : same.concat(other);
     }
     let steps = 0;
     function bt(k) {
