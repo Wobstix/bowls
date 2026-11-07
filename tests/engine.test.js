@@ -255,45 +255,44 @@ suite('Remembered settings', 'New competition opens on the last format with its 
 });
 
 // 8. Club ladder
-suite('Club ladder', 'Challenges only upwards, up to 3 places (any distance when the ladder is open or a free challenge is left); one open challenge per player; a challenger who wins (or gets a walkover) takes the defender\'s place and those in between move down one; a defender who wins changes nothing; new entrants start at the bottom with 2 free challenges; due 14 days after the challenge.', check => {
-  for (let k = 0; k < 3000; k++) {
-    const L = E.newLadder(), n = R(4, 30);
-    E.ladderAdd(L, Array.from({ length: n }, (_, i) => 'p' + i), false);
-    if (rng() < 0.5) E.ladderAdd(L, ['new1', 'new2'], true);
-    L.open = rng() < 0.2;
-    check(L.players[L.players.length - 1] === (L.players.includes('new2') ? 'new2' : 'p' + (n - 1)), 'new entrants at bottom');
+suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points and shot difference add up over all games (difference may go below zero); ordered on points, then difference, then fewest against; anyone may play anyone; cancelled games count for nothing; a result needs one player on 21 and the other below.', check => {
+  check(E.ladderPoints(21, 17) === 2 && E.ladderPoints(17, 21) === 0, '21-17: 2 and 0');
+  check(E.ladderPoints(18, 21) === 1 && E.ladderPoints(19, 21) === 1 && E.ladderPoints(20, 21) === 1, 'loss within 3 gets 1');
+  check(!E.validLadderScore(20, 18) && !E.validLadderScore(21, 21) && !E.validLadderScore(23, 21) && E.validLadderScore(23, 20) && E.validLadderScore(0, 21), 'winner 21 or more, loser under 21');
+  for (let k = 0; k < 2000; k++) {
+    const L = E.newLadder(), n = R(2, 25), ids = Array.from({ length: n }, (_, i) => 'p' + i);
+    E.ladderAdd(L, ids);
+    const exp = {}; ids.forEach(id => exp[id] = { pts: 0, diff: 0, ag: 0, pl: 0 });
     for (let step = 0; step < 40; step++) {
-      const c = L.players[R(0, L.players.length - 1)], d = L.players[R(0, L.players.length - 1)];
-      const ic = L.players.indexOf(c), id = L.players.indexOf(d), freeBefore = L.free[c] || 0;
-      const busy = !!(E.openChallengeOf(L, c) || E.openChallengeOf(L, d));
-      const expect = ic > id && !busy && (L.open || ic - id <= 3 || freeBefore > 0);
+      const c = ids[R(0, n - 1)], d = ids[R(0, n - 1)];
       const res = E.canChallenge(L, c, d);
-      check(res.ok === expect, `canChallenge ${c}->${d} ic=${ic} id=${id} open=${L.open} free=${freeBefore} busy=${busy}`);
+      check(res.ok === (c !== d && !E.openBetween(L, c, d)), 'anyone may play anyone');
       if (!res.ok) continue;
-      const ch = E.issueChallenge(L, c, d, '2026-10-01', () => 'x' + k + '_' + step);
-      check((L.free[c] || 0) === Math.max(0, freeBefore - 1), 'free challenge used');
-      check(E.dueDate(ch) === '2026-10-15' && E.isOverdue(ch, '2026-10-16') && !E.isOverdue(ch, '2026-10-15'), 'due in 14 days');
-      const before = L.players.slice(), r = rng();
-      if (r < 0.15) { E.cancelChallenge(L, ch.id); check(JSON.stringify(before) === JSON.stringify(L.players), 'cancel changes nothing'); continue; }
-      let challengerWon;
-      if (r < 0.3) { E.recordWalkover(L, ch.id, '2026-10-20'); challengerWon = true; }
-      else { const cw = rng() < 0.5, a = cw ? 21 : R(0, 20), b = cw ? R(0, 20) : 21; E.recordResult(L, ch.id, a, b, '2026-10-10'); challengerWon = cw; check(ch.winner === (cw ? c : d), 'winner recorded'); }
-      check(new Set(L.players).size === before.length && L.players.length === before.length, 'ladder still holds everyone once');
-      if (!challengerWon) check(JSON.stringify(before) === JSON.stringify(L.players), 'defender win changes nothing');
-      else {
-        const exp = before.slice(); exp.splice(ic, 1); exp.splice(id, 0, c);
-        check(JSON.stringify(exp) === JSON.stringify(L.players), 'challenger takes the place, others move down one');
-        check(L.players.indexOf(d) === id + 1, 'defender drops one place');
-      }
-      check(!E.openChallengeOf(L, c) && !E.openChallengeOf(L, d), 'challenge closed');
+      const ch = E.issueChallenge(L, c, d, '2026-11-01', () => 'x' + k + '_' + step);
+      if (rng() < 0.2) { E.cancelChallenge(L, ch.id); continue; }
+      if (rng() < 0.2) continue; // left open
+      const cw = rng() < 0.5, lose = R(0, 20), win = R(21, 26), a = cw ? win : lose, b = cw ? lose : win;
+      E.recordResult(L, ch.id, a, b, '2026-11-05');
+      [[c, a, b], [d, b, a]].forEach(([id, f, ag]) => { const e = exp[id]; e.pl++; e.pts += f > ag ? 2 : ag - f <= 3 ? 1 : 0; e.diff += f - ag; e.ag += ag; });
+    }
+    const t = E.ladderTable(L);
+    check(t.length === n, 'everyone in the table');
+    t.forEach(r => { const e = exp[r.id]; check(r.points === e.pts && r.diff === e.diff && r.against === e.ag && r.played === e.pl, `totals ${r.id}`); });
+    for (let i = 1; i < t.length; i++) {
+      const x = t[i - 1], y = t[i];
+      check(x.points > y.points || (x.points === y.points && (x.diff > y.diff || (x.diff === y.diff && x.against <= y.against))), 'order: points, difference, fewest against');
     }
   }
-  const L = E.newLadder(); E.ladderAdd(L, ['a', 'b', 'c', 'd', 'e', 'f'], false); E.ladderAdd(L, ['n'], true);
-  check(E.canChallenge(L, 'n', 'a').ok && E.canChallenge(L, 'n', 'a').usesFree, 'new entrant can challenge the top with a free challenge');
-  check(!E.canChallenge(L, 'f', 'a').ok && E.canChallenge(L, 'f', 'c').ok, 'normal player limited to 3 places');
-  L.open = true; check(E.canChallenge(L, 'f', 'a').ok, 'open ladder: anyone above');
+  // the secretary's example: three narrow losses (3 pts, -3) rank above a single win and heavy losses
+  const L = E.newLadder(); E.ladderAdd(L, ['a', 'b', 'w', 'x']);
+  ['1', '2', '3'].forEach(i => { E.issueChallenge(L, 'a', 'x', '2026-11-01', () => 'a' + i); E.recordResult(L, 'a' + i, 20, 21, '2026-11-02'); });
+  E.issueChallenge(L, 'b', 'w', '2026-11-01', () => 'b1'); E.recordResult(L, 'b1', 21, 19, '2026-11-02');
+  E.issueChallenge(L, 'b', 'x', '2026-11-01', () => 'b2'); E.recordResult(L, 'b2', 5, 21, '2026-11-02');
+  const t = E.ladderTable(L), A = t.find(r => r.id === 'a'), B = t.find(r => r.id === 'b');
+  check(A.points === 3 && A.diff === -3 && B.points === 2 && B.diff === -14 && A.place < B.place, 'narrow losses rank above one win');
   let threw = false; try { E.recordResult(L, 'nope', 21, 3, 'x'); } catch (e) { threw = true; } check(threw, 'unknown challenge refused');
-  E.ladderRemove(L, 'c'); check(!L.players.includes('c'), 'player removed');
+  E.issueChallenge(L, 'w', 'x', '2026-11-01', () => 'c1'); threw = false; try { E.recordResult(L, 'c1', 20, 18, 'x'); } catch (e) { threw = true; } check(threw, 'score without 21 refused');
+  E.ladderRemove(L, 'b'); check(!L.players.includes('b') && E.ladderTable(L).length === 3, 'player removed');
 });
 
 // ---------- Worked example for the report ----------

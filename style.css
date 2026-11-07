@@ -138,3 +138,6 @@ a.btn{display:block}
 .sheet-t tr.namesrow .nmbtn{flex:none;background:#fff;color:var(--green);border:0;border-radius:8px;font:inherit;font-size:15px;font-weight:700;padding:7px 10px;cursor:pointer}
 .sheet-t tr.namesrow .nmpick{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .sheet-t tr.namesrow .nmpick button{text-align:left;background:#fff;color:#000;border:0;border-radius:8px;font:inherit;font-size:17px;font-weight:600;padding:11px 12px;cursor:pointer}
+.ltab td,.ltab th{padding:8px 4px;vertical-align:middle}
+.ltab td:nth-child(2){font-weight:600}
+.ltab .ledit button{width:34px;height:34px}
