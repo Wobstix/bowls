@@ -330,17 +330,17 @@
   // ---------- Club ladder (points table) ----------
   // ladder = { players: [id...] (order joined), challenges: [...] }
   // challenge = { id, challenger, defender, date (YYYY-MM-DD), status: 'open'|'played'|'cancelled', shotsC, shotsD, resultDate, winner }
-  // Singles: first to 21 (the last end can take the winner past 21). Win = 2 points; a loss by 3 shots or fewer (18, 19 or 20) = 1 point; otherwise 0.
+  // Singles: first to 21; the last end can take the winner to 24 at most. Win = 2 points; a loss by 3 shots or fewer (18, 19 or 20) = 1 point; otherwise 0.
   // The table is ordered on points, then shot difference (which may go below zero), then fewest shots against.
   // Anyone may play anyone. Cancelled challenges and old walkovers do not count.
-  const LADDER_DAYS = 14, LADDER_TARGET = 21, LADDER_CLOSE = 3;
+  const LADDER_DAYS = 14, LADDER_TARGET = 21, LADDER_MAX = 24, LADDER_CLOSE = 3;
   function newLadder() { return { players: [], challenges: [] }; }
   function addDays(d, n) { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
   function dueDate(ch) { return addDays(ch.date, LADDER_DAYS); }
   function isOverdue(ch, today) { return ch.status === 'open' && today > dueDate(ch); }
   function ladderPoints(forShots, against) { return forShots > against ? 2 : against - forShots <= LADDER_CLOSE ? 1 : 0; }
   function validLadderScore(a, b) {
-    return Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0 && Math.max(a, b) >= LADDER_TARGET && Math.min(a, b) < LADDER_TARGET;
+    return Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0 && Math.max(a, b) >= LADDER_TARGET && Math.max(a, b) <= LADDER_MAX && Math.min(a, b) < LADDER_TARGET;
   }
   function openBetween(L, x, y) { return L.challenges.find(c => c.status === 'open' && ((c.challenger === x && c.defender === y) || (c.challenger === y && c.defender === x))); }
   function openChallengeOf(L, id) { return L.challenges.find(c => c.status === 'open' && (c.challenger === id || c.defender === id)); }
@@ -379,7 +379,7 @@
   }
   function recordResult(L, chId, shotsC, shotsD, date) {
     const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') throw new Error('Not an open challenge');
-    if (!validLadderScore(shotsC, shotsD)) throw new Error(`One player must have ${LADDER_TARGET} or more and the other less than ${LADDER_TARGET}`);
+    if (!validLadderScore(shotsC, shotsD)) throw new Error(`The winner must have ${LADDER_TARGET} to ${LADDER_MAX}, the loser less than ${LADDER_TARGET}`);
     ch.status = 'played'; ch.shotsC = shotsC; ch.shotsD = shotsD; ch.resultDate = date;
     ch.winner = shotsC > shotsD ? ch.challenger : ch.defender;
     ch.pointsC = ladderPoints(shotsC, shotsD); ch.pointsD = ladderPoints(shotsD, shotsC);
@@ -408,7 +408,7 @@
   const api = { FORMATS, GROUPS, POS_X, posCost, makeRng, shuffle, teamLetter, sortRinks, greenOf,
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
     scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings,
-    LADDER_DAYS, LADDER_TARGET, LADDER_CLOSE, newLadder, addDays, dueDate, isOverdue, ladderPoints, validLadderScore, openBetween, openChallengeOf,
+    LADDER_DAYS, LADDER_TARGET, LADDER_MAX, LADDER_CLOSE, newLadder, addDays, dueDate, isOverdue, ladderPoints, validLadderScore, openBetween, openChallengeOf,
     ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);

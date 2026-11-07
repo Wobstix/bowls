@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.0 (Points ladder)';
+  const VERSION = '0.7.1 (Points ladder)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -761,7 +761,7 @@
         ${open.length ? `<div class="card"><div class="lbl">Games to play (${open.length})</div>${chRows}<p class="small muted">Tap a game to enter the result or cancel it.</p></div>` : ''}
         <div class="card"><div class="lbl">Ladder${ladderEdit ? ' · remove players' : ''}</div>
           ${L.players.length ? `<table class="ltab"><tr><th class="c">#</th><th>Name</th><th class="c">Pl</th><th class="c">Pts</th><th class="c">+/−</th>${ladderEdit ? '<th></th>' : ''}</tr>${rows}</table>
-            <p class="small muted">Win 2 points; lose by 3 or fewer (18, 19 or 20) 1 point. Ordered on points, then shot difference.</p>`
+            <p class="small muted">Win 2 points; lose by 3 shots or fewer (e.g. 18–21, 20–23) 1 point. Ordered on points, then shot difference.</p>`
           : `<div class="empty">No players yet. Tap Add players.</div>`}
         </div>
         <div class="btns"><button class="btn alt" data-act="ladd">Add players</button><button class="btn alt" data-act="ledit">${ladderEdit ? 'Done' : 'Remove players'}</button></div>
@@ -821,7 +821,7 @@
     const L = state.ladder, nm = ladderName;
     if (!c) return;
     const d = dialog(`<h3 style="margin:0 0 4px">${esc(nm(c.challenger))} v ${esc(nm(c.defender))}</h3>
-      <p class="small muted" style="margin:0 0 10px">Play by ${shortDate(E.dueDate(c))} · first to 21 or more</p>
+      <p class="small muted" style="margin:0 0 10px">Play by ${shortDate(E.dueDate(c))} · first to 21 (24 at most)</p>
       <div class="lscore"><label>${esc(nm(c.challenger))}<input class="sc" id="sC" type="text" inputmode="numeric" maxlength="2"></label>
       <label>${esc(nm(c.defender))}<input class="sc" id="sD" type="text" inputmode="numeric" maxlength="2"></label></div>
       <div id="lpts" class="small" style="min-height:22px;margin:-4px 0 8px;font-weight:700"></div>
@@ -836,7 +836,7 @@
     d.querySelector('[data-x]').onclick = () => d.close();
     d.querySelector('[data-s]').onclick = () => {
       const a = num('#sC'), b = num('#sD'), date = d.querySelector('#rdate').value || todayISO();
-      if (a === null || b === null || !E.validLadderScore(a, b)) { toast('One player must have 21 or more, the other less than 21'); return; }
+      if (a === null || b === null || !E.validLadderScore(a, b)) { toast('The winner must have 21 to 24, the loser less than 21'); return; }
       const r = E.recordResult(L, c.id, a, b, date); save(); d.close(); render();
       toast(`${nm(r.winner)} wins · ${nm(c.challenger)} ${r.pointsC} pt${r.pointsC === 1 ? '' : 's'}, ${nm(c.defender)} ${r.pointsD} pt${r.pointsD === 1 ? '' : 's'}`);
     };

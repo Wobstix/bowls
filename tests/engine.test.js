@@ -258,7 +258,8 @@ suite('Remembered settings', 'New competition opens on the last format with its 
 suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points and shot difference add up over all games (difference may go below zero); ordered on points, then difference, then fewest against; anyone may play anyone; cancelled games count for nothing; a result needs one player on 21 and the other below.', check => {
   check(E.ladderPoints(21, 17) === 2 && E.ladderPoints(17, 21) === 0, '21-17: 2 and 0');
   check(E.ladderPoints(18, 21) === 1 && E.ladderPoints(19, 21) === 1 && E.ladderPoints(20, 21) === 1, 'loss within 3 gets 1');
-  check(!E.validLadderScore(20, 18) && !E.validLadderScore(21, 21) && !E.validLadderScore(23, 21) && E.validLadderScore(23, 20) && E.validLadderScore(0, 21), 'winner 21 or more, loser under 21');
+  check(!E.validLadderScore(20, 18) && !E.validLadderScore(21, 21) && !E.validLadderScore(23, 21) && E.validLadderScore(23, 20) && E.validLadderScore(24, 19) && !E.validLadderScore(25, 20) && E.validLadderScore(0, 21), 'winner 21 to 24, loser under 21');
+  check(E.ladderPoints(20, 23) === 1 && E.ladderPoints(19, 24) === 0, '23-20 gives the loser 1, 24-19 gives 0');
   for (let k = 0; k < 2000; k++) {
     const L = E.newLadder(), n = R(2, 25), ids = Array.from({ length: n }, (_, i) => 'p' + i);
     E.ladderAdd(L, ids);
@@ -271,7 +272,7 @@ suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points 
       const ch = E.issueChallenge(L, c, d, '2026-11-01', () => 'x' + k + '_' + step);
       if (rng() < 0.2) { E.cancelChallenge(L, ch.id); continue; }
       if (rng() < 0.2) continue; // left open
-      const cw = rng() < 0.5, lose = R(0, 20), win = R(21, 26), a = cw ? win : lose, b = cw ? lose : win;
+      const cw = rng() < 0.5, lose = R(0, 20), win = R(21, 24), a = cw ? win : lose, b = cw ? lose : win;
       E.recordResult(L, ch.id, a, b, '2026-11-05');
       [[c, a, b], [d, b, a]].forEach(([id, f, ag]) => { const e = exp[id]; e.pl++; e.pts += f > ag ? 2 : ag - f <= 3 ? 1 : 0; e.diff += f - ag; e.ag += ag; });
     }
