@@ -293,6 +293,14 @@ suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points 
   check(A.points === 3 && A.diff === -3 && B.points === 2 && B.diff === -14 && A.place < B.place, 'narrow losses rank above one win');
   let threw = false; try { E.recordResult(L, 'nope', 21, 3, 'x'); } catch (e) { threw = true; } check(threw, 'unknown challenge refused');
   E.issueChallenge(L, 'w', 'x', '2026-11-01', () => 'c1'); threw = false; try { E.recordResult(L, 'c1', 20, 18, 'x'); } catch (e) { threw = true; } check(threw, 'score without 21 refused');
+  // deleting a result entered by mistake: the table is the same as if it had never been entered
+  { const D = E.newLadder(); E.ladderAdd(D, ['lou', 'mar', 'jul']);
+    E.issueChallenge(D, 'lou', 'mar', '2026-11-04', () => 'r1'); E.recordResult(D, 'r1', 21, 12, '2026-11-04');
+    const before = JSON.stringify(E.ladderTable(D));
+    E.issueChallenge(D, 'lou', 'jul', '2026-11-04', () => 'r2'); E.recordResult(D, 'r2', 21, 12, '2026-11-04');
+    check(JSON.stringify(E.ladderTable(D)) !== before, 'wrong result counted');
+    E.deleteGame(D, 'r2'); check(JSON.stringify(E.ladderTable(D)) === before && D.challenges.length === 1, 'deleted result removed from the table');
+    check(E.deleteGame(D, 'nope') === null, 'unknown result ignored'); }
   E.ladderRemove(L, 'b'); check(!L.players.includes('b') && E.ladderTable(L).length === 3, 'player removed');
 });
 

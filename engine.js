@@ -385,6 +385,11 @@
     ch.pointsC = ladderPoints(shotsC, shotsD); ch.pointsD = ladderPoints(shotsD, shotsC);
     return ch;
   }
+  // Remove a game entered by mistake (played or not). The table is worked out from the games, so it corrects itself.
+  function deleteGame(L, chId) {
+    const i = L.challenges.findIndex(c => c.id === chId); if (i < 0) return null;
+    return L.challenges.splice(i, 1)[0];
+  }
   function cancelChallenge(L, chId) {
     const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') return null;
     ch.status = 'cancelled'; return ch;
@@ -409,6 +414,6 @@
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
     scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings,
     LADDER_DAYS, LADDER_TARGET, LADDER_MAX, LADDER_CLOSE, newLadder, addDays, dueDate, isOverdue, ladderPoints, validLadderScore, openBetween, openChallengeOf,
-    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge };
+    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge, deleteGame };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);

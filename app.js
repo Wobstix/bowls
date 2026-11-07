@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.2 (Points ladder)';
+  const VERSION = '0.7.3 (Points ladder)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -859,9 +859,17 @@
     const d = dialog(`<h3 style="margin:0 0 10px">Ladder results</h3>
       ${done.length ? done.map(c => { const w = c.winner, l = w === c.challenger ? c.defender : c.challenger;
         const ws = Math.max(c.shotsC, c.shotsD), ls = Math.min(c.shotsC, c.shotsD);
-        return `<div class="row"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${ws}–${ls}<div class="sub">${shortDate(c.resultDate)} · ${esc(nm(w))} 2 pts, ${esc(nm(l))} ${E.ladderPoints(ls, ws)} pt${E.ladderPoints(ls, ws) === 1 ? '' : 's'}</div></div></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
+        return `<div class="row"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${ws}–${ls}<div class="sub">${shortDate(c.resultDate)} · ${esc(nm(w))} 2 pts, ${esc(nm(l))} ${E.ladderPoints(ls, ws)} pt${E.ladderPoints(ls, ws) === 1 ? '' : 's'}</div></div>
+          <span class="ledit"><button class="lx" data-del="${c.id}" aria-label="Delete this result">✕</button></span></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
+      ${done.length ? '<p class="small muted">Tap ✕ to delete a result entered by mistake.</p>' : ''}
       <button class="btn alt" data-x>Close</button>`);
     d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+      const c = L.challenges.find(x => x.id === b.dataset.del); if (!c) return;
+      const w = c.winner, l = w === c.challenger ? c.defender : c.challenger;
+      d.close();
+      confirmBox(`Delete the result ${nm(w)} beat ${nm(l)} ${Math.max(c.shotsC, c.shotsD)}–${Math.min(c.shotsC, c.shotsD)} (${shortDate(c.resultDate)})? The ladder is worked out again without it. This cannot be undone.`, 'Delete', () => { E.deleteGame(L, c.id); save(); render(); toast('Result deleted'); ladderHistoryDialog(); });
+    });
   }
 
   // ---------- About ----------
