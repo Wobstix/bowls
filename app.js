@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.1 (Points ladder)';
+  const VERSION = '0.7.2 (Points ladder)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -765,7 +765,7 @@
           : `<div class="empty">No players yet. Tap Add players.</div>`}
         </div>
         <div class="btns"><button class="btn alt" data-act="ladd">Add players</button><button class="btn alt" data-act="ledit">${ladderEdit ? 'Done' : 'Remove players'}</button></div>
-        <div class="btns"><button class="btn alt" data-act="lhist">Results</button><button class="btn alt" data-act="lshare">Share ladder</button></div>`,
+        <div class="btns"><button class="btn alt" data-act="lhist">Results</button><button class="btn alt" data-act="lprint">Print</button><button class="btn alt" data-act="lshare">Share</button></div>`,
       bottom: L.players.length > 1 ? `<button class="btn" data-act="lnew">+ New challenge</button>` : '',
       actions: {
         ledit() { ladderEdit = !ladderEdit; render(); },
@@ -774,10 +774,21 @@
         lnew() { challengeDialog(); },
         ch(el) { challengeActionDialog(L.challenges.find(c => c.id === el.dataset.id)); },
         lhist() { ladderHistoryDialog(); },
+        print() {
+          let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
+          pa.innerHTML = `<div class="printres ladderprint"><h1>${esc(state.club.name)} — Singles Ladder</h1><p>Updated ${fmtDate(Date.now())} · Win 2 points · lose by 3 shots or fewer 1 point · ordered on points, then shot difference</p>
+            <table><tr><th class="c">#</th><th>Name</th><th class="c">Played</th><th class="c">Won</th><th class="c">Lost</th><th class="c">Points</th><th class="c">For</th><th class="c">Against</th><th class="c">Diff</th></tr>
+            ${table.map(r => `<tr><td class="c"><b>${r.place}</b></td><td><b>${esc(nm(r.id))}</b></td><td class="c">${r.played}</td><td class="c">${r.won}</td><td class="c">${r.lost}</td><td class="c"><b>${r.points}</b></td><td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c">${sgn(r.diff)}</td></tr>`).join('')}</table>
+            ${open.length ? `<h2>Games to play</h2><table>${open.map(c => `<tr><td>${esc(nm(c.challenger))} v ${esc(nm(c.defender))}</td><td class="c">challenged ${shortDate(c.date)}</td><td class="c">play by ${shortDate(E.dueDate(c))}</td></tr>`).join('')}</table>` : ''}
+            <p style="margin-top:6mm">Anyone may challenge anyone. Singles, first to 21 (24 at most). Play within 2 weeks. Give both scores to the ladder organiser.</p></div>`;
+          setTimeout(() => window.print(), 50);
+        },
+        lprint() { this.print(); },
         async lshare() {
-          const lines = [`${state.club.name} — club ladder (${shortDate(today)})`, ''];
-          table.forEach(r => lines.push(`${r.place}. ${nm(r.id)} – ${r.points} pts, ${sgn(r.diff)} (${r.played} played)`));
-          if (open.length) { lines.push('', 'Games to play:'); open.forEach(c => lines.push(`${nm(c.challenger)} v ${nm(c.defender)} – by ${shortDate(E.dueDate(c))}`)); }
+          const lines = [`*${state.club.name} – Singles Ladder*`, `_${fmtDate(Date.now())}_`, ''];
+          table.forEach(r => lines.push(`*${r.place}. ${nm(r.id)}* – ${r.points} pts, ${sgn(r.diff)} (P${r.played} W${r.won} L${r.lost})`));
+          if (open.length) { lines.push('', '*Games to play*'); open.forEach(c => lines.push(`${nm(c.challenger)} v ${nm(c.defender)} – by ${shortDate(E.dueDate(c))}`)); }
+          lines.push('', '_Win 2 pts · lose by 3 or fewer 1 pt · points, then shot difference_');
           const text = lines.join('\n');
           try { if (navigator.share) { await navigator.share({ title: 'Club ladder', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
           try { await navigator.clipboard.writeText(text); toast('Ladder copied'); } catch (e) { toast('Could not share'); }
