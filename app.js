@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.4 (Points ladder)';
+  const VERSION = '0.7.5 (Points ladder)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -787,6 +787,15 @@
         async lshare() {
           const lines = [`*${state.club.name} – Singles Ladder*`, `_${fmtDate(Date.now())}_`, ''];
           table.forEach(r => lines.push(`*${r.place}. ${nm(r.id)}* – ${r.points} pts, ${sgn(r.diff)} (P${r.played} W${r.won} L${r.lost})`));
+          const played = L.challenges.filter(c => c.status === 'played').sort((a, b) => (b.resultDate || '').localeCompare(a.resultDate || ''));
+          if (played.length) {
+            lines.push('', '*Results* (most recent first)'); let day = null;
+            played.forEach(c => {
+              if (c.resultDate !== day) { day = c.resultDate; lines.push(`_${shortDate(day)}_`); }
+              const w = c.winner, l = w === c.challenger ? c.defender : c.challenger, ws = Math.max(c.shotsC, c.shotsD), ls = Math.min(c.shotsC, c.shotsD);
+              lines.push(`${nm(w)} ${ws}–${ls} ${nm(l)} (2–${E.ladderPoints(ls, ws)} pts)`);
+            });
+          }
           if (open.length) { lines.push('', '*Games to play*'); open.forEach(c => lines.push(`${nm(c.challenger)} v ${nm(c.defender)} – by ${shortDate(E.dueDate(c))}`)); }
           lines.push('', '_Win 2 pts · lose by 3 or fewer 1 pt · points, then shot difference_');
           const text = lines.join('\n');
