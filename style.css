@@ -141,3 +141,10 @@ a.btn{display:block}
 .ltab td,.ltab th{padding:8px 4px;vertical-align:middle}
 .ltab td:nth-child(2){font-weight:600}
 .ltab .ledit button{width:34px;height:34px}
+.lres{border-radius:10px}
+.lres .lresact{display:none;padding:0 10px 10px}
+.lres .lresact .btn{margin-top:0;padding:11px}
+.lres.sel{background:var(--ok-bg);outline:2px solid var(--green)}
+.lres.sel>.row{border-bottom:0;padding-left:10px;padding-right:10px}
+.lres.sel .lresact{display:flex}
+.lscore select{font-size:15px;padding:8px 6px}

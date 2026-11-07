@@ -390,6 +390,15 @@
     const i = L.challenges.findIndex(c => c.id === chId); if (i < 0) return null;
     return L.challenges.splice(i, 1)[0];
   }
+  // Correct a result: players, scores and date. Same checks as entering it.
+  function editResult(L, chId, playerA, playerB, shotsA, shotsB, date) {
+    const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'played') throw new Error('Not a result');
+    if (!playerA || !playerB || playerA === playerB) throw new Error('Choose two different players');
+    if (!validLadderScore(shotsA, shotsB)) throw new Error(`The winner must have ${LADDER_TARGET} to ${LADDER_MAX}, the loser less than ${LADDER_TARGET}`);
+    Object.assign(ch, { challenger: playerA, defender: playerB, shotsC: shotsA, shotsD: shotsB, resultDate: date || ch.resultDate,
+      winner: shotsA > shotsB ? playerA : playerB, pointsC: ladderPoints(shotsA, shotsB), pointsD: ladderPoints(shotsB, shotsA) });
+    return ch;
+  }
   function cancelChallenge(L, chId) {
     const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'open') return null;
     ch.status = 'cancelled'; return ch;
@@ -414,6 +423,6 @@
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
     scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings,
     LADDER_DAYS, LADDER_TARGET, LADDER_MAX, LADDER_CLOSE, newLadder, addDays, dueDate, isOverdue, ladderPoints, validLadderScore, openBetween, openChallengeOf,
-    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge, deleteGame };
+    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge, deleteGame, editResult };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);

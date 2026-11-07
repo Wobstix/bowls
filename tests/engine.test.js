@@ -301,6 +301,17 @@ suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points 
     check(JSON.stringify(E.ladderTable(D)) !== before, 'wrong result counted');
     E.deleteGame(D, 'r2'); check(JSON.stringify(E.ladderTable(D)) === before && D.challenges.length === 1, 'deleted result removed from the table');
     check(E.deleteGame(D, 'nope') === null, 'unknown result ignored'); }
+  // editing a wrong player: the table matches entering it correctly in the first place
+  { const X = E.newLadder(), Y = E.newLadder(); [X, Y].forEach(Z => E.ladderAdd(Z, ['lou', 'mar', 'jul']));
+    E.issueChallenge(X, 'lou', 'jul', '2026-11-04', () => 'e1'); E.recordResult(X, 'e1', 21, 12, '2026-11-04');
+    E.issueChallenge(Y, 'lou', 'mar', '2026-11-04', () => 'e1'); E.recordResult(Y, 'e1', 21, 12, '2026-11-04');
+    E.editResult(X, 'e1', 'lou', 'mar', 21, 12, '2026-11-04');
+    check(JSON.stringify(E.ladderTable(X)) === JSON.stringify(E.ladderTable(Y)), 'edited result counts as if entered correctly');
+    E.editResult(X, 'e1', 'mar', 'lou', 20, 23, '2026-11-05'); const m = E.ladderTable(X).find(r => r.id === 'mar');
+    check(m.points === 1 && m.diff === -3 && X.challenges[0].winner === 'lou', 'edit scores: 20-23 loser gets 1');
+    let t1 = false; try { E.editResult(X, 'e1', 'lou', 'lou', 21, 3); } catch (e) { t1 = true; }
+    let t2 = false; try { E.editResult(X, 'e1', 'lou', 'mar', 20, 3); } catch (e) { t2 = true; }
+    check(t1 && t2, 'edit keeps the checks'); }
   E.ladderRemove(L, 'b'); check(!L.players.includes('b') && E.ladderTable(L).length === 3, 'player removed');
 });
 

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.3 (Points ladder)';
+  const VERSION = '0.7.4 (Points ladder)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -859,17 +859,45 @@
     const d = dialog(`<h3 style="margin:0 0 10px">Ladder results</h3>
       ${done.length ? done.map(c => { const w = c.winner, l = w === c.challenger ? c.defender : c.challenger;
         const ws = Math.max(c.shotsC, c.shotsD), ls = Math.min(c.shotsC, c.shotsD);
-        return `<div class="row"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${ws}–${ls}<div class="sub">${shortDate(c.resultDate)} · ${esc(nm(w))} 2 pts, ${esc(nm(l))} ${E.ladderPoints(ls, ws)} pt${E.ladderPoints(ls, ws) === 1 ? '' : 's'}</div></div>
-          <span class="ledit"><button class="lx" data-del="${c.id}" aria-label="Delete this result">✕</button></span></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
-      ${done.length ? '<p class="small muted">Tap ✕ to delete a result entered by mistake.</p>' : ''}
+        return `<div class="lres" data-r="${c.id}"><div class="row tap"><div class="main"><b>${esc(nm(w))}</b> beat ${esc(nm(l))} ${ws}–${ls}<div class="sub">${shortDate(c.resultDate)} · ${esc(nm(w))} 2 pts, ${esc(nm(l))} ${E.ladderPoints(ls, ws)} pt${E.ladderPoints(ls, ws) === 1 ? '' : 's'}</div></div></div>
+          <div class="lresact btns"><button class="btn alt" data-ed="${c.id}">Edit</button><button class="btn danger" data-del="${c.id}">Delete</button></div></div>`; }).join('') : '<div class="empty">No results yet.</div>'}
+      ${done.length ? '<p class="small muted">Tap a result to edit or delete it.</p>' : ''}
       <button class="btn alt" data-x>Close</button>`);
     d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('.lres > .row').forEach(r => r.onclick = () => {
+      const box = r.parentElement, on = !box.classList.contains('sel');
+      d.querySelectorAll('.lres.sel').forEach(x => x.classList.remove('sel'));
+      if (on) box.classList.add('sel');
+    });
     d.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       const c = L.challenges.find(x => x.id === b.dataset.del); if (!c) return;
       const w = c.winner, l = w === c.challenger ? c.defender : c.challenger;
       d.close();
       confirmBox(`Delete the result ${nm(w)} beat ${nm(l)} ${Math.max(c.shotsC, c.shotsD)}–${Math.min(c.shotsC, c.shotsD)} (${shortDate(c.resultDate)})? The ladder is worked out again without it. This cannot be undone.`, 'Delete', () => { E.deleteGame(L, c.id); save(); render(); toast('Result deleted'); ladderHistoryDialog(); });
     });
+    d.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { const c = L.challenges.find(x => x.id === b.dataset.ed); if (!c) return; d.close(); editResultDialog(c); });
+  }
+  function editResultDialog(c) {
+    const L = state.ladder, nm = ladderName;
+    const ids = [...new Set(L.players.concat([c.challenger, c.defender]))].sort((a, b) => nm(a).localeCompare(nm(b)));
+    const sel = (id, cur) => `<select id="${id}">${ids.map(x => `<option value="${x}" ${x === cur ? 'selected' : ''}>${esc(nm(x))}</option>`).join('')}</select>`;
+    const d = dialog(`<h3 style="margin:0 0 10px">Edit result</h3>
+      <div class="lscore"><label>Player${sel('eA', c.challenger)}<input class="sc" id="sA" type="text" inputmode="numeric" maxlength="2" value="${c.shotsC}"></label>
+      <label>Player${sel('eB', c.defender)}<input class="sc" id="sB" type="text" inputmode="numeric" maxlength="2" value="${c.shotsD}"></label></div>
+      <div id="lpts" class="small" style="min-height:22px;margin:-4px 0 8px;font-weight:700"></div>
+      <div class="field"><label>Date played</label><input type="date" id="edate" value="${c.resultDate || todayISO()}"></div>
+      <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Save</button></div>`);
+    const num = id => { const v = d.querySelector(id).value.replace(/\D/g, ''); return v === '' ? null : parseInt(v, 10); };
+    const showPts = () => { const a = num('#sA'), b = num('#sB'), out = d.querySelector('#lpts'), A = d.querySelector('#eA').value, B = d.querySelector('#eB').value;
+      out.textContent = a !== null && b !== null && E.validLadderScore(a, b) ? `Points: ${nm(A)} ${E.ladderPoints(a, b)}, ${nm(B)} ${E.ladderPoints(b, a)}` : ''; };
+    d.querySelectorAll('input.sc').forEach(i => i.oninput = () => { i.value = i.value.replace(/\D/g, '').slice(0, 2); showPts(); });
+    d.querySelectorAll('select').forEach(s => s.onchange = showPts); showPts();
+    d.querySelector('[data-x]').onclick = () => { d.close(); ladderHistoryDialog(); };
+    d.querySelector('[data-s]').onclick = () => {
+      try { E.editResult(L, c.id, d.querySelector('#eA').value, d.querySelector('#eB').value, num('#sA'), num('#sB'), d.querySelector('#edate').value); }
+      catch (e) { toast(e.message); return; }
+      save(); d.close(); render(); toast('Result changed'); ladderHistoryDialog();
+    };
   }
 
   // ---------- About ----------
