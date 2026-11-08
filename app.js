@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.8.2 (Ladder seasons)';
+  const VERSION = '0.8.3';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -970,6 +970,9 @@
           <div style="font-size:21px;font-weight:800">Bowls Competition Manager</div>
           <div class="muted">Version ${VERSION}</div>
           <div style="margin-top:8px">Made by <b>Wobstix</b></div>
+        </div>
+        <div class="card"><div class="lbl">Created at Queens Bowling Club, Durban</div>
+          <p class="small" style="margin:0">This app was created for, and first used by, Queens Bowling Club. It is shared free of charge and may not be sold or charged for.</p>
         </div>
         <div class="card"><div class="lbl">Suggestions and problems</div>
           <p class="small" style="margin-top:0">Would you like something changed or added, or has something gone wrong? Send a note — your app version and club name are filled in for you.</p>
