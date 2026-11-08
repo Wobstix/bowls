@@ -362,7 +362,8 @@
     });
     const cmp = (x, y) => y.points - x.points || y.diff - x.diff || x.against - y.against;
     rows.sort((x, y) => cmp(x, y) || x.joined - y.joined);
-    rows.forEach((r, i) => { r.place = i > 0 && cmp(rows[i - 1], r) === 0 ? rows[i - 1].place : i + 1; });
+    // no shared places: a tie is decided by the order carried over from last season (or the order players joined)
+    rows.forEach((r, i) => { r.place = i + 1; });
     return rows;
   }
   function canChallenge(L, challenger, defender) {

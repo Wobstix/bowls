@@ -322,7 +322,7 @@ suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points 
     check(JSON.stringify(season.table.map(r => [r.id, r.points, r.diff])) === JSON.stringify(before.map(r => [r.id, r.points, r.diff])) && season.table[0].name === 'P', 'final table saved with names');
     check(season.results.length === 2 && season.results[0].date === '2026-10-06' && season.results[0].winner === 'R', 'results saved, newest first');
     check(E.ladderTable(S).every(r => r.points === 0 && r.played === 0) && S.players.length === 3, 'everyone back to 0, players kept');
-    check(JSON.stringify(E.ladderTable(S).map(r => r.id)) === JSON.stringify(before.map(r => r.id)), 'new season starts in last season\'s final order');
+    check(JSON.stringify(E.ladderTable(S).map(r => [r.place, r.id])) === JSON.stringify(before.map((r, i) => [i + 1, r.id])), 'new season starts in last season\'s final order, numbered 1, 2, 3');
     check(S.challenges.length === 1 && S.challenges[0].status === 'open', 'open game carried over');
     E.recordResult(S, 's3', 21, 20, '2027-01-03'); const t = E.ladderTable(S);
     check(t[0].id === 'p' && t[0].points === 2 && t.find(r => r.id === 'r').points === 1, 'carried game counts in the new season');

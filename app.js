@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.8.1 (Ladder seasons)';
+  const VERSION = '0.8.2 (Ladder seasons)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -744,7 +744,7 @@
   let ladderEdit = false;
   const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v);
   const ladderName = id => { const m = state.members.find(x => x.id === id); return m ? m.name : '(removed)'; };
-  const lplace = r => r.played ? r.place : '–';
+  const lplace = r => r.place;
   const isoDate = iso => fmtDate(new Date(iso + 'T12:00:00').getTime());
   // One view of a ladder (current or a past season) used for Share and Print.
   function currentLadderView() {
