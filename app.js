@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.8.3';
+  const VERSION = '0.8.4';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -971,7 +971,7 @@
           <div class="muted">Version ${VERSION}</div>
           <div style="margin-top:8px">Made by <b>Wobstix</b></div>
         </div>
-        <div class="card"><div class="lbl">Created at Queens Bowling Club, Durban</div>
+        <div class="card"><div class="lbl" style="text-align:center;font-size:15px;line-height:1.35">Property of<br>Queens Bowling Club, Durban</div>
           <p class="small" style="margin:0">This app was created for, and first used by, Queens Bowling Club. It is shared free of charge and may not be sold or charged for.</p>
         </div>
         <div class="card"><div class="lbl">Suggestions and problems</div>
