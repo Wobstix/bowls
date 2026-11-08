@@ -404,6 +404,8 @@
         .sort((x, y) => (y.date || '').localeCompare(x.date || '')),
     };
     L.seasons = (L.seasons || []).concat(season);
+    // the new season starts in last season's final order; with everyone on 0 that order holds until games are played
+    L.players = season.table.map(r => r.id);
     L.challenges = L.challenges.filter(c => c.status === 'open');
     L.seasonStart = today;
     return season;

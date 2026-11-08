@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.8.0 (Ladder seasons)';
+  const VERSION = '0.8.1 (Ladder seasons)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -791,7 +791,7 @@
     const L = state.ladder, n = L.challenges.filter(c => c.status === 'played').length, op = L.challenges.filter(c => c.status === 'open').length;
     const d = dialog(`<h3 style="margin:0 0 10px">Start a new season</h3>
       <p style="margin:0 0 10px">Everyone goes back to 0 points. The current table and its ${n} result${n === 1 ? '' : 's'} are saved under <b>Past seasons</b>, where they can be printed or shared.</p>
-      <p class="small muted" style="margin:0 0 10px">Players stay on the ladder.${op ? ` The ${op} game${op === 1 ? '' : 's'} still to play carr${op === 1 ? 'ies' : 'y'} over and will count in the new season.` : ''}</p>
+      <p class="small muted" style="margin:0 0 10px">Players stay on the ladder, in the current order, until games are played.${op ? ` The ${op} game${op === 1 ? '' : 's'} still to play carr${op === 1 ? 'ies' : 'y'} over and will count in the new season.` : ''}</p>
       <div class="field"><label>New season starts</label><input type="date" id="sdate" value="${todayISO()}"></div>
       <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Start new season</button></div>`);
     d.querySelector('[data-x]').onclick = () => d.close();
