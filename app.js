@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const E = window.BowlsEngine;
-  const VERSION = '0.7.5 (Points ladder)';
+  const VERSION = '0.8.0 (Ladder seasons)';
   const MODE_NAMES = { tabsin: 'Tabs-in', fixed: 'Fixed teams', cards: 'Draw cards' };
   const KEY = 'bowls.v1';
   const FORMAT_NAMES = { pairs: 'Pairs', trips: 'Trips', fours: 'Fours' };
@@ -744,6 +744,77 @@
   let ladderEdit = false;
   const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v);
   const ladderName = id => { const m = state.members.find(x => x.id === id); return m ? m.name : '(removed)'; };
+  const lplace = r => r.played ? r.place : '–';
+  const isoDate = iso => fmtDate(new Date(iso + 'T12:00:00').getTime());
+  // One view of a ladder (current or a past season) used for Share and Print.
+  function currentLadderView() {
+    const L = state.ladder, nm = ladderName;
+    const played = L.challenges.filter(c => c.status === 'played');
+    return {
+      period: L.seasonStart ? `Season from ${isoDate(L.seasonStart)}` : '', stamp: `Updated ${fmtDate(Date.now())}`,
+      rows: E.ladderTable(L).map(r => Object.assign({}, r, { name: nm(r.id) })),
+      results: played.map(c => { const l = c.winner === c.challenger ? c.defender : c.challenger;
+        return { date: c.resultDate, winner: nm(c.winner), loser: nm(l), ws: Math.max(c.shotsC, c.shotsD), ls: Math.min(c.shotsC, c.shotsD) }; })
+        .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+      open: L.challenges.filter(c => c.status === 'open').sort((a, b) => a.date < b.date ? -1 : 1)
+        .map(c => ({ a: nm(c.challenger), b: nm(c.defender), date: c.date, due: E.dueDate(c) })),
+    };
+  }
+  function seasonView(se) {
+    return { period: `Season ${isoDate(se.start)} – ${isoDate(se.end)} · final table`, stamp: '', rows: se.table, results: se.results, open: [] };
+  }
+  function ladderShareText(v) {
+    const lines = [`*${state.club.name} – Singles Ladder*`]; if (v.period) lines.push(`_${v.period}_`); if (v.stamp) lines.push(`_${v.stamp}_`); lines.push('');
+    v.rows.forEach(r => lines.push(`*${lplace(r)}. ${r.name}* – ${r.points} pts, ${sgn(r.diff)} (P${r.played} W${r.won} L${r.lost})`));
+    if (v.results.length) {
+      lines.push('', '*Results* (most recent first)'); let day = null;
+      v.results.forEach(x => { if (x.date !== day) { day = x.date; lines.push(`_${shortDate(day)}_`); } lines.push(`${x.winner} ${x.ws}–${x.ls} ${x.loser} (2–${E.ladderPoints(x.ls, x.ws)} pts)`); });
+    }
+    if (v.open.length) { lines.push('', '*Games to play*'); v.open.forEach(o => lines.push(`${o.a} v ${o.b} – by ${shortDate(o.due)}`)); }
+    lines.push('', '_Win 2 pts · lose by 3 or fewer 1 pt · points, then shot difference_');
+    return lines.join('\n');
+  }
+  async function shareLadderText(text) {
+    try { if (navigator.share) { await navigator.share({ title: 'Club ladder', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(text); toast('Ladder copied'); } catch (e) { toast('Could not share'); }
+  }
+  function printLadder(v) {
+    let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
+    pa.innerHTML = `<div class="printres ladderprint"><h1>${esc(state.club.name)} — Singles Ladder</h1><p>${[v.period, v.stamp].filter(Boolean).map(esc).join(' · ')}<br>Win 2 points · lose by 3 shots or fewer 1 point · ordered on points, then shot difference</p>
+      <table><tr><th class="c">#</th><th>Name</th><th class="c">Played</th><th class="c">Won</th><th class="c">Lost</th><th class="c">Points</th><th class="c">For</th><th class="c">Against</th><th class="c">Diff</th></tr>
+      ${v.rows.map(r => `<tr><td class="c"><b>${lplace(r)}</b></td><td><b>${esc(r.name)}</b></td><td class="c">${r.played}</td><td class="c">${r.won}</td><td class="c">${r.lost}</td><td class="c"><b>${r.points}</b></td><td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c">${sgn(r.diff)}</td></tr>`).join('')}</table>
+      ${v.open.length ? `<h2>Games to play</h2><table>${v.open.map(o => `<tr><td>${esc(o.a)} v ${esc(o.b)}</td><td class="c">challenged ${shortDate(o.date)}</td><td class="c">play by ${shortDate(o.due)}</td></tr>`).join('')}</table>` : ''}
+      <p style="margin-top:6mm">Anyone may challenge anyone. Singles, first to 21 (24 at most). Play within 2 weeks. Give both scores to the ladder organiser.</p></div>`;
+    setTimeout(() => window.print(), 50);
+  }
+  function newSeasonDialog() {
+    const L = state.ladder, n = L.challenges.filter(c => c.status === 'played').length, op = L.challenges.filter(c => c.status === 'open').length;
+    const d = dialog(`<h3 style="margin:0 0 10px">Start a new season</h3>
+      <p style="margin:0 0 10px">Everyone goes back to 0 points. The current table and its ${n} result${n === 1 ? '' : 's'} are saved under <b>Past seasons</b>, where they can be printed or shared.</p>
+      <p class="small muted" style="margin:0 0 10px">Players stay on the ladder.${op ? ` The ${op} game${op === 1 ? '' : 's'} still to play carr${op === 1 ? 'ies' : 'y'} over and will count in the new season.` : ''}</p>
+      <div class="field"><label>New season starts</label><input type="date" id="sdate" value="${todayISO()}"></div>
+      <div class="btns"><button class="btn alt" data-x>Cancel</button><button class="btn" data-s>Start new season</button></div>`);
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelector('[data-s]').onclick = () => { const day = d.querySelector('#sdate').value || todayISO(); E.newSeason(L, day, ladderName); save(); d.close(); render(); toast('New season started'); };
+  }
+  function pastSeasonsDialog() {
+    const L = state.ladder, list = (L.seasons || []).map((se, i) => ({ se, i })).reverse();
+    const d = dialog(`<h3 style="margin:0 0 10px">Past seasons</h3>
+      ${list.map(({ se, i }) => `<div class="lres" data-i="${i}"><div class="row tap"><div class="main"><b>${isoDate(se.start)} – ${isoDate(se.end)}</b>
+        <div class="sub">${se.table[0] ? `Top: ${esc(se.table[0].name)} (${se.table[0].points} pts)` : 'No players'} · ${se.results.length} result${se.results.length === 1 ? '' : 's'}</div></div></div>
+        <div class="lresact btns"><button class="btn alt" data-v="${i}">View</button><button class="btn alt" data-p="${i}">Print</button><button class="btn alt" data-sh="${i}">Share</button></div></div>`).join('')}
+      <button class="btn alt" data-x>Close</button>`);
+    d.querySelector('[data-x]').onclick = () => d.close();
+    d.querySelectorAll('.lres > .row').forEach(r => r.onclick = () => { const b = r.parentElement, on = !b.classList.contains('sel'); d.querySelectorAll('.lres.sel').forEach(x => x.classList.remove('sel')); if (on) b.classList.add('sel'); });
+    d.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { d.close(); printLadder(seasonView(L.seasons[+b.dataset.p])); });
+    d.querySelectorAll('[data-sh]').forEach(b => b.onclick = () => shareLadderText(ladderShareText(seasonView(L.seasons[+b.dataset.sh]))));
+    d.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { const se = L.seasons[+b.dataset.v]; d.close();
+      const v = dialog(`<h3 style="margin:0 0 4px">Final table</h3><p class="small muted" style="margin:0 0 8px">${isoDate(se.start)} – ${isoDate(se.end)}</p>
+        <table class="ltab"><tr><th class="c">#</th><th>Name</th><th class="c">Pl</th><th class="c">Pts</th><th class="c">+/−</th></tr>
+        ${se.table.map(r => `<tr><td class="c"><b>${lplace(r)}</b></td><td>${esc(r.name)}</td><td class="c">${r.played}</td><td class="c"><b>${r.points}</b></td><td class="c">${sgn(r.diff)}</td></tr>`).join('')}</table>
+        <button class="btn alt" data-x>Back</button>`);
+      v.querySelector('[data-x]').onclick = () => { v.close(); pastSeasonsDialog(); }; });
+  }
   function ladderScreen() {
     const L = state.ladder, today = todayISO(), nm = ladderName;
     const table = E.ladderTable(L);
@@ -753,10 +824,10 @@
       return `<div class="row tap" data-act="ch" data-id="${c.id}"><div class="main"><b>${esc(nm(c.challenger))}</b> v <b>${esc(nm(c.defender))}</b>
         <div class="sub ${od ? 'overdue' : ''}">${od ? 'OVERDUE — ' : ''}challenged ${shortDate(c.date)} · play by ${shortDate(E.dueDate(c))}</div></div><span class="chev">›</span></div>`;
     }).join('');
-    const rows = table.map(r => `<tr><td class="c"><b>${r.place}</b></td><td>${esc(nm(r.id))}</td><td class="c">${r.played}</td><td class="c"><b>${r.points}</b></td><td class="c">${sgn(r.diff)}</td>
+    const rows = table.map(r => `<tr><td class="c"><b>${lplace(r)}</b></td><td>${esc(nm(r.id))}</td><td class="c">${r.played}</td><td class="c"><b>${r.points}</b></td><td class="c">${sgn(r.diff)}</td>
         ${ladderEdit ? `<td class="c"><span class="ledit"><button data-act="lrem" data-id="${r.id}" class="lx" aria-label="Remove">✕</button></span></td>` : ''}</tr>`).join('');
     return {
-      title: 'Club ladder', sub: `${L.players.length} players · win 2 · lose by 3 or fewer 1`, back: '#home', keepScroll: true,
+      title: 'Club ladder', sub: `${L.seasonStart ? `Season from ${shortDate(L.seasonStart)} · ` : ''}${L.players.length} players · win 2 · lose by 3 or fewer 1`, back: '#home', keepScroll: true,
       body: `
         ${open.length ? `<div class="card"><div class="lbl">Games to play (${open.length})</div>${chRows}<p class="small muted">Tap a game to enter the result or cancel it.</p></div>` : ''}
         <div class="card"><div class="lbl">Ladder${ladderEdit ? ' · remove players' : ''}</div>
@@ -765,7 +836,8 @@
           : `<div class="empty">No players yet. Tap Add players.</div>`}
         </div>
         <div class="btns"><button class="btn alt" data-act="ladd">Add players</button><button class="btn alt" data-act="ledit">${ladderEdit ? 'Done' : 'Remove players'}</button></div>
-        <div class="btns"><button class="btn alt" data-act="lhist">Results</button><button class="btn alt" data-act="lprint">Print</button><button class="btn alt" data-act="lshare">Share</button></div>`,
+        <div class="btns"><button class="btn alt" data-act="lhist">Results</button><button class="btn alt" data-act="lprint">Print</button><button class="btn alt" data-act="lshare">Share</button></div>
+        <div class="btns">${(L.seasons || []).length ? '<button class="btn alt" data-act="lpast">Past seasons</button>' : ''}${L.players.length ? '<button class="btn alt" data-act="lseason">New season</button>' : ''}</div>`,
       bottom: L.players.length > 1 ? `<button class="btn" data-act="lnew">+ New challenge</button>` : '',
       actions: {
         ledit() { ladderEdit = !ladderEdit; render(); },
@@ -774,34 +846,10 @@
         lnew() { challengeDialog(); },
         ch(el) { challengeActionDialog(L.challenges.find(c => c.id === el.dataset.id)); },
         lhist() { ladderHistoryDialog(); },
-        print() {
-          let pa = document.getElementById('printArea'); if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
-          pa.innerHTML = `<div class="printres ladderprint"><h1>${esc(state.club.name)} — Singles Ladder</h1><p>Updated ${fmtDate(Date.now())} · Win 2 points · lose by 3 shots or fewer 1 point · ordered on points, then shot difference</p>
-            <table><tr><th class="c">#</th><th>Name</th><th class="c">Played</th><th class="c">Won</th><th class="c">Lost</th><th class="c">Points</th><th class="c">For</th><th class="c">Against</th><th class="c">Diff</th></tr>
-            ${table.map(r => `<tr><td class="c"><b>${r.place}</b></td><td><b>${esc(nm(r.id))}</b></td><td class="c">${r.played}</td><td class="c">${r.won}</td><td class="c">${r.lost}</td><td class="c"><b>${r.points}</b></td><td class="c">${r.for}</td><td class="c">${r.against}</td><td class="c">${sgn(r.diff)}</td></tr>`).join('')}</table>
-            ${open.length ? `<h2>Games to play</h2><table>${open.map(c => `<tr><td>${esc(nm(c.challenger))} v ${esc(nm(c.defender))}</td><td class="c">challenged ${shortDate(c.date)}</td><td class="c">play by ${shortDate(E.dueDate(c))}</td></tr>`).join('')}</table>` : ''}
-            <p style="margin-top:6mm">Anyone may challenge anyone. Singles, first to 21 (24 at most). Play within 2 weeks. Give both scores to the ladder organiser.</p></div>`;
-          setTimeout(() => window.print(), 50);
-        },
-        lprint() { this.print(); },
-        async lshare() {
-          const lines = [`*${state.club.name} – Singles Ladder*`, `_${fmtDate(Date.now())}_`, ''];
-          table.forEach(r => lines.push(`*${r.place}. ${nm(r.id)}* – ${r.points} pts, ${sgn(r.diff)} (P${r.played} W${r.won} L${r.lost})`));
-          const played = L.challenges.filter(c => c.status === 'played').sort((a, b) => (b.resultDate || '').localeCompare(a.resultDate || ''));
-          if (played.length) {
-            lines.push('', '*Results* (most recent first)'); let day = null;
-            played.forEach(c => {
-              if (c.resultDate !== day) { day = c.resultDate; lines.push(`_${shortDate(day)}_`); }
-              const w = c.winner, l = w === c.challenger ? c.defender : c.challenger, ws = Math.max(c.shotsC, c.shotsD), ls = Math.min(c.shotsC, c.shotsD);
-              lines.push(`${nm(w)} ${ws}–${ls} ${nm(l)} (2–${E.ladderPoints(ls, ws)} pts)`);
-            });
-          }
-          if (open.length) { lines.push('', '*Games to play*'); open.forEach(c => lines.push(`${nm(c.challenger)} v ${nm(c.defender)} – by ${shortDate(E.dueDate(c))}`)); }
-          lines.push('', '_Win 2 pts · lose by 3 or fewer 1 pt · points, then shot difference_');
-          const text = lines.join('\n');
-          try { if (navigator.share) { await navigator.share({ title: 'Club ladder', text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
-          try { await navigator.clipboard.writeText(text); toast('Ladder copied'); } catch (e) { toast('Could not share'); }
-        },
+        lprint() { printLadder(currentLadderView()); },
+        lshare() { shareLadderText(ladderShareText(currentLadderView())); },
+        lseason() { newSeasonDialog(); },
+        lpast() { pastSeasonsDialog(); },
       },
     };
   }

@@ -312,6 +312,20 @@ suite('Club ladder', 'Points table: win 2, loss by 3 or fewer 1, else 0; points 
     let t1 = false; try { E.editResult(X, 'e1', 'lou', 'lou', 21, 3); } catch (e) { t1 = true; }
     let t2 = false; try { E.editResult(X, 'e1', 'lou', 'mar', 20, 3); } catch (e) { t2 = true; }
     check(t1 && t2, 'edit keeps the checks'); }
+  // new season: table saved, everyone back to 0, players kept, open games carried over
+  { const S = E.newLadder(); E.ladderAdd(S, ['p', 'q', 'r']);
+    E.issueChallenge(S, 'p', 'q', '2026-10-01', () => 's1'); E.recordResult(S, 's1', 21, 15, '2026-10-02');
+    E.issueChallenge(S, 'q', 'r', '2026-10-05', () => 's2'); E.recordResult(S, 's2', 19, 21, '2026-10-06');
+    E.issueChallenge(S, 'p', 'r', '2026-12-30', () => 's3');
+    const before = E.ladderTable(S), season = E.newSeason(S, '2027-01-01', id => id.toUpperCase());
+    check(season.start === '2026-10-02' && season.end === '2027-01-01', 'season dates');
+    check(JSON.stringify(season.table.map(r => [r.id, r.points, r.diff])) === JSON.stringify(before.map(r => [r.id, r.points, r.diff])) && season.table[0].name === 'P', 'final table saved with names');
+    check(season.results.length === 2 && season.results[0].date === '2026-10-06' && season.results[0].winner === 'R', 'results saved, newest first');
+    check(E.ladderTable(S).every(r => r.points === 0 && r.played === 0) && S.players.length === 3, 'everyone back to 0, players kept');
+    check(S.challenges.length === 1 && S.challenges[0].status === 'open', 'open game carried over');
+    E.recordResult(S, 's3', 21, 20, '2027-01-03'); const t = E.ladderTable(S);
+    check(t[0].id === 'p' && t[0].points === 2 && t.find(r => r.id === 'r').points === 1, 'carried game counts in the new season');
+    const s2 = E.newSeason(S, '2027-06-30'); check(s2.start === '2027-01-01' && S.seasons.length === 2, 'second season starts where the first ended'); }
   E.ladderRemove(L, 'b'); check(!L.players.includes('b') && E.ladderTable(L).length === 3, 'player removed');
 });
 

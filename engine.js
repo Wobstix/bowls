@@ -390,6 +390,24 @@
     const i = L.challenges.findIndex(c => c.id === chId); if (i < 0) return null;
     return L.challenges.splice(i, 1)[0];
   }
+  // New season: the final table and results are saved (with names, so they stay readable if a member leaves),
+  // results are cleared so everyone starts on 0, players stay on the ladder and games still to play carry over.
+  function newSeason(L, today, nameOf) {
+    nameOf = nameOf || (id => id);
+    const played = L.challenges.filter(c => c.status === 'played');
+    const first = played.map(c => c.resultDate).filter(Boolean).sort()[0];
+    const season = {
+      start: L.seasonStart || first || today, end: today,
+      table: ladderTable(L).map(r => Object.assign({}, r, { name: nameOf(r.id) })),
+      results: played.map(c => { const l = c.winner === c.challenger ? c.defender : c.challenger;
+        return { date: c.resultDate, winner: nameOf(c.winner), loser: nameOf(l), ws: Math.max(c.shotsC, c.shotsD), ls: Math.min(c.shotsC, c.shotsD) }; })
+        .sort((x, y) => (y.date || '').localeCompare(x.date || '')),
+    };
+    L.seasons = (L.seasons || []).concat(season);
+    L.challenges = L.challenges.filter(c => c.status === 'open');
+    L.seasonStart = today;
+    return season;
+  }
   // Correct a result: players, scores and date. Same checks as entering it.
   function editResult(L, chId, playerA, playerB, shotsA, shotsB, date) {
     const ch = L.challenges.find(c => c.id === chId); if (!ch || ch.status !== 'played') throw new Error('Not a result');
@@ -423,6 +441,6 @@
     tabsInCount, checkEntries, solveGroupPositions, formTabsInTeams, drawRound1, round2Table,
     scoreMatch, round2Matches, standings, standingsFromCards, cardsEntered, checkCards, gameDone, skipCards, STARTING, newCompetitionSettings, switchFormat, rememberSettings,
     LADDER_DAYS, LADDER_TARGET, LADDER_MAX, LADDER_CLOSE, newLadder, addDays, dueDate, isOverdue, ladderPoints, validLadderScore, openBetween, openChallengeOf,
-    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge, deleteGame, editResult };
+    ladderAdd, ladderRemove, ladderTable, canChallenge, eligibleDefenders, issueChallenge, recordResult, cancelChallenge, deleteGame, editResult, newSeason };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BowlsEngine = api;
 })(this);
